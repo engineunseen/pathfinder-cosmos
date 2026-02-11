@@ -301,14 +301,72 @@ canvas {
   right: 16px;
   transform: translateY(-50%);
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.ai-status-row {
+  display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.ai-title {
   font-size: 10px;
   letter-spacing: 2px;
   color: var(--green);
   text-shadow: var(--glow-green);
   writing-mode: vertical-lr;
+  /* Keep vertical? Or horizontal? Original was vertical */
   text-orientation: mixed;
+}
+
+/* Original had writing-mode vertical. 
+   If I want "CALCULATING" below it, vertical layout is tricky.
+   Let's switch to Horizontal for better readability of the message?
+   Or keep vertical "AI ACTIVE" and horizontal "CALCULATING"?
+   That would look weird.
+   Let's SWITCH to Horizontal layout on the right edge.
+*/
+
+.ai-indicator {
+  position: fixed;
+  top: 150px;
+  /* Below Mission Panel */
+  right: 16px;
+  transform: none;
+  /* Remove centering Y */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ai-title {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--green);
+  text-shadow: var(--glow-green);
+  /* Removed vertical writing mode */
+  font-weight: 700;
+}
+
+.ai-calculating {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  opacity: 0.8;
+}
+
+.blink-text {
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
 }
 
 .ai-dot {

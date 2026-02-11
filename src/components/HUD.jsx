@@ -350,8 +350,13 @@ export default function HUD({
             {/* AI Mode indicator */}
             {aiMode !== 'off' && gameState === 'playing' && (
                 <div className="ai-indicator">
-                    <div className="ai-dot pulse-dot" />
-                    <span>{aiMode === 'autopilot' ? STRINGS[language].autopilotActive : STRINGS[language].aiActive}</span>
+                    <div className="ai-status-row">
+                        <div className="ai-dot pulse-dot" />
+                        <span className="ai-title">{aiMode === 'autopilot' ? STRINGS[language].autopilotActive : STRINGS[language].aiActive}</span>
+                    </div>
+                    <div className="ai-calculating">
+                        <span className="blink-text">CALCULATING TRAJECTORIES...</span>
+                    </div>
                 </div>
             )}
 

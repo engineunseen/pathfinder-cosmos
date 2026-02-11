@@ -246,17 +246,26 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
                     <meshStandardMaterial color="#cccccc" />
                 </mesh>
 
-                {/* Solar Panel with Stripes */}
+                {/* Solar Panel with Grid */}
                 <group position={[0, 0.65, 0.5]} rotation={[-0.1, 0, 0]}>
                     <mesh>
                         <boxGeometry args={[1.6, 0.05, 1.4]} />
                         <meshStandardMaterial color="#1a1a45" roughness={0.2} metalness={0.8} />
                     </mesh>
-                    {/* Stripes */}
-                    {[...Array(6)].map((_, k) => (
-                        <mesh key={k} position={[0, 0.026, -0.6 + k * 0.24]}>
-                            <boxGeometry args={[1.5, 0.005, 0.02]} />
-                            <meshStandardMaterial color="#556677" roughness={0.5} />
+
+                    {/* Longitudinal Stripes (Z-axis) */}
+                    {[...Array(5)].map((_, k) => (
+                        <mesh key={`z-${k}`} position={[-0.7 + k * 0.35, 0.026, 0]}>
+                            <boxGeometry args={[0.01, 0.005, 1.42]} />
+                            <meshStandardMaterial color="#8899aa" roughness={0.5} metalness={0.5} />
+                        </mesh>
+                    ))}
+
+                    {/* Transverse Stripes (X-axis) */}
+                    {[...Array(4)].map((_, k) => (
+                        <mesh key={`x-${k}`} position={[0, 0.026, -0.6 + k * 0.4]}>
+                            <boxGeometry args={[1.62, 0.005, 0.01]} />
+                            <meshStandardMaterial color="#8899aa" roughness={0.5} metalness={0.5} />
                         </mesh>
                     ))}
                 </group>
