@@ -246,11 +246,33 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
                     <meshStandardMaterial color="#cccccc" />
                 </mesh>
 
-                {/* Solar Panel */}
-                <mesh position={[0, 0.65, 0.5]} rotation={[-0.1, 0, 0]}>
-                    <boxGeometry args={[1.6, 0.05, 1.4]} />
-                    <meshStandardMaterial color="#1a1a45" roughness={0.2} metalness={0.8} />
-                </mesh>
+                {/* Solar Panel with Stripes */}
+                <group position={[0, 0.65, 0.5]} rotation={[-0.1, 0, 0]}>
+                    <mesh>
+                        <boxGeometry args={[1.6, 0.05, 1.4]} />
+                        <meshStandardMaterial color="#1a1a45" roughness={0.2} metalness={0.8} />
+                    </mesh>
+                    {/* Stripes */}
+                    {[...Array(6)].map((_, k) => (
+                        <mesh key={k} position={[0, 0.026, -0.6 + k * 0.24]}>
+                            <boxGeometry args={[1.5, 0.005, 0.02]} />
+                            <meshStandardMaterial color="#556677" roughness={0.5} />
+                        </mesh>
+                    ))}
+                </group>
+
+                {/* Antenna */}
+                <group position={[0.7, 0.5, -1.2]}>
+                    <mesh position={[0, 0.4, 0]}>
+                        <cylinderGeometry args={[0.02, 0.02, 0.8, 8]} />
+                        <meshStandardMaterial color="#aaaaaa" metalness={0.8} roughness={0.2} />
+                    </mesh>
+                    <mesh position={[0, 0.8, 0]}>
+                        <sphereGeometry args={[0.06, 16, 16]} />
+                        <meshStandardMaterial color="#ff3300" emissive="#ff0000" emissiveIntensity={0.8} />
+                    </mesh>
+                    <pointLight position={[0, 0.8, 0]} color="#ff0000" intensity={0.5} distance={2} />
+                </group>
 
                 {/* Headlights */}
                 <mesh position={[-0.6, 0, -1.61]}>
@@ -275,14 +297,30 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
                         position={w.pos}
                     >
                         <group>
+                            {/* Tire */}
                             <mesh castShadow receiveShadow rotation={[0, 0, Math.PI / 2]}>
-                                <cylinderGeometry args={[WHEEL_RADIUS, WHEEL_RADIUS, 0.4, 16]} />
-                                <meshStandardMaterial color="#555555" roughness={0.8} />
+                                <cylinderGeometry args={[WHEEL_RADIUS, WHEEL_RADIUS, 0.4, 24]} />
+                                <meshStandardMaterial color="#333333" roughness={0.8} />
                             </mesh>
+                            {/* Hub */}
                             <mesh position={[hubX, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                                <cylinderGeometry args={[0.15, 0.15, 0.05, 8]} />
+                                <cylinderGeometry args={[0.15, 0.15, 0.05, 16]} />
                                 <meshStandardMaterial color="#999999" metalness={0.8} />
                             </mesh>
+                            {/* Treads */}
+                            {[...Array(8)].map((_, t) => {
+                                const angle = (t / 8) * Math.PI * 2;
+                                return (
+                                    <mesh
+                                        key={t}
+                                        position={[0, Math.sin(angle) * WHEEL_RADIUS, Math.cos(angle) * WHEEL_RADIUS]}
+                                        rotation={[angle, 0, 0]}
+                                    >
+                                        <boxGeometry args={[0.38, 0.04, 0.08]} />
+                                        <meshStandardMaterial color="#222222" />
+                                    </mesh>
+                                );
+                            })}
                         </group>
                     </group>
                 );

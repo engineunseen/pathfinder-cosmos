@@ -63,7 +63,7 @@ function TelemetryPanel({ telemetry, lang }) {
 }
 
 // Mission Control panel (Top Right)
-function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain }) {
+function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, version }) {
     const t = STRINGS[lang];
 
     return (
@@ -383,6 +383,19 @@ export default function HUD({
                 lang={language}
                 onLanguageChange={onLanguageChange}
             />
+
+            {/* Version Display */}
+            <div style={{
+                position: 'absolute',
+                bottom: '5px',
+                right: '10px',
+                color: 'rgba(255, 255, 255, 0.3)',
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                pointerEvents: 'none'
+            }}>
+                v0.3.5-alpha
+            </div>
         </div>
     );
 }
