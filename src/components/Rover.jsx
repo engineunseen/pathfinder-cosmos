@@ -47,7 +47,7 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
         args: CHASSIS_SIZE,
         position: startPosition,
         linearDamping: 0.5, // air drag
-        angularDamping: 0.5,
+        angularDamping: 0.9, // Higher damping prevents sudden flips
         material: { friction: 0.1, restitution: 0 }, // slippery chassis, grip comes from suspension
         allowSleep: false,
         onCollide: (e) => {
@@ -99,17 +99,16 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
         const targetSteer = (left - right) * 0.5;
         steerAngle.current += (targetSteer - steerAngle.current) * 0.1;
 
-        // Throttle
-        const throttle = forward - backward;
-        throttleRef.current = throttle;
+        // Throttle Smoothing (prevents instant jerk)
+        const targetThrottle = forward - backward;
+        throttleRef.current += (targetThrottle - throttleRef.current) * 0.1;
 
-        // Vehicle coordinate system
+        // Get current orientation
         const quat = new THREE.Quaternion(...rotation.current);
+        const upDir = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
         const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
         const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(quat);
-        const upDir = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
 
-        // Apply suspension forces for each wheel
         let wheelsOnGround = 0;
 
         WHEELS.forEach((w, i) => {
@@ -121,8 +120,6 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
             const terrainHeight = getHeightAtPosition(terrainData.heightData, wheelWorldPos.x, wheelWorldPos.z);
 
             // Calculate compression
-            // Current distance from mount point to ground
-            // Note: we approximate contact point is directly below mount point
             const distToGround = wheelWorldPos.y - terrainHeight;
             const maxLength = SUSPENSION_REST_DIST + MAX_SUSPENSION_TRAVEL;
 
@@ -130,14 +127,11 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
                 wheelsOnGround++;
 
                 // Suspension force (Spring)
-                // Compression amount: positive when compressed
                 const compression = Math.max(0, maxLength - distToGround);
-                const normalizeCompression = compression / maxLength; // 0..1
 
                 const force = SUSPENSION_STIFFNESS * compression;
 
                 // Damping force
-                // Project velocity onto up vector
                 const pointVel = new THREE.Vector3(...velocity.current)
                     .add(new THREE.Vector3(...angVelocity.current).cross(wheelWorldPos.clone().sub(new THREE.Vector3(...position.current))));
                 const damping = pointVel.dot(upDir) * SUSPENSION_DAMPING;
@@ -151,22 +145,22 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
                 );
 
                 // Friction / Traction
-                // Only apply drive force if wheel is touching ground
-                if (Math.abs(throttle) > 0.01 && !brake) {
-                    const driveForce = throttle * 120.0; // Increased drive power
-                    // Apply steering to front/rear wheels if needed (here simplified)
-                    // If we steer, we rotate the force vector
-                    const wheelSteer = (i < 2) ? steerAngle.current : (i > 3 ? -steerAngle.current * 0.5 : 0); // 4-wheel steering
-
+                if (Math.abs(throttleRef.current) > 0.01 && !brake) {
+                    const driveForce = throttleRef.current * 120.0;
+                    const wheelSteer = (i < 2) ? steerAngle.current : (i > 3 ? -steerAngle.current * 0.5 : 0);
                     const wheelForward = forwardDir.clone().applyAxisAngle(upDir, wheelSteer);
+
+                    // PHYSICS HACK: Reduce torque by applying force closer to CoM vertical plane
+                    const relPos = wheelWorldPos.clone().sub(new THREE.Vector3(...position.current));
+                    relPos.y *= 0.1;
 
                     api.applyForce(
                         wheelForward.multiplyScalar(driveForce).toArray(),
-                        wheelWorldPos.clone().sub(new THREE.Vector3(...position.current)).toArray()
+                        relPos.toArray()
                     );
                 }
 
-                // Sideways friction to prevent sliding
+                // Sideways friction
                 const sideVel = pointVel.dot(rightDir);
                 const frictionForce = -sideVel * 20.0;
                 api.applyForce(
@@ -177,19 +171,15 @@ const Rover = forwardRef(function Rover({ getInput, terrainData, onTelemetryUpda
 
             // Visual update of wheel mesh
             if (wheelRefs.current[i]) {
-                // Visual wheel should stick to ground if within travel, or hang if in air
                 let visualY = -distToGround;
-                // Clamp visual extension
                 visualY = Math.max(-maxLength, Math.min(0, visualY));
 
-                // Also rotate for steering
                 const wheelGroup = wheelRefs.current[i];
                 wheelGroup.position.y = w.pos[1] + visualY + WHEEL_RADIUS;
 
-                // Rotation
-                // Spin matching speed
+                // Rotation (Spin)
                 const speed = new THREE.Vector3(...velocity.current).length();
-                const spin = (speed * delta / WHEEL_RADIUS) * (throttle > 0 ? -1 : 1);
+                const spin = (speed * delta / WHEEL_RADIUS) * (throttleRef.current > 0 ? -1 : 1);
                 wheelGroup.children[0].rotation.x += spin;
 
                 // Steering

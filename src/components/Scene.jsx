@@ -164,7 +164,7 @@ export function Stars({ count = 2500 }) {
                     itemSize={3}
                 />
             </bufferGeometry>
-            <pointsMaterial size={1.5} color="#ffffff" sizeAttenuation={false} />
+            <pointsMaterial size={1.5} color="#888888" sizeAttenuation={false} />
         </points>
     );
 }

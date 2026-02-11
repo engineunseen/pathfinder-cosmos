@@ -17,38 +17,18 @@ function createRockGeometry(scale, type, seed) {
 
     let geo;
     if (type === 0) {
-        // Chunky boulder — dodecahedron slightly squashed
         geo = new THREE.DodecahedronGeometry(scale, 1);
     } else if (type === 1) {
-        // Jagged shard — icosahedron
         geo = new THREE.IcosahedronGeometry(scale * 0.9, 1);
     } else if (type === 2) {
-        // Angular rock — octahedron stretched
         geo = new THREE.OctahedronGeometry(scale, 1);
     } else {
-        // Flat slab — box with randomized proportions
         const w = scale * (0.6 + rng() * 0.8);
         const h = scale * (0.3 + rng() * 0.4);
         const d = scale * (0.6 + rng() * 0.8);
-        geo = new THREE.BoxGeometry(w, h, d, 2, 2, 2);
+        geo = new THREE.BoxGeometry(w, h, d);
     }
 
-    // Convert to non-indexed for clean flat shading
-    geo = geo.toNonIndexed();
-
-    // Subtle per-vertex displacement for natural irregularity
-    const positions = geo.attributes.position.array;
-    for (let i = 0; i < positions.length; i += 3) {
-        const dist = Math.sqrt(positions[i] ** 2 + positions[i + 1] ** 2 + positions[i + 2] ** 2);
-        if (dist > 0.01) {
-            const factor = 1 + (rng() - 0.5) * 0.15; // ±7.5% per vertex
-            positions[i] *= factor;
-            positions[i + 1] *= factor * (0.7 + rng() * 0.3); // squash vertically
-            positions[i + 2] *= factor;
-        }
-    }
-
-    geo.computeVertexNormals();
     return geo;
 }
 

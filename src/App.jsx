@@ -164,8 +164,9 @@ export default function App() {
 
         // Check success
         const dx = telemetry.position[0] - terrainData.beacon.x;
+        const dy = telemetry.position[1] - terrainData.beacon.y;
         const dz = telemetry.position[2] - terrainData.beacon.z;
-        const currentDist = Math.sqrt(dx * dx + dz * dz);
+        const currentDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         if (currentDist < 5 && state.gameState === 'playing') {
           dispatch({ type: 'SET_GAME_STATE', payload: { state: 'success' } });
@@ -243,8 +244,9 @@ export default function App() {
 
   const targetDistance = useMemo(() => {
     const dx = telemetry.position[0] - terrainData.beacon.x;
+    const dy = telemetry.position[1] - terrainData.beacon.y;
     const dz = telemetry.position[2] - terrainData.beacon.z;
-    return Math.sqrt(dx * dx + dz * dz);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }, [telemetry.position, terrainData.beacon]);
 
   return (

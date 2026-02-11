@@ -67,7 +67,7 @@ function Earth() {
     }, []);
 
     return (
-        <group position={[200, 30, -400]}>
+        <group position={[100, 20, -250]}>
             {/* Earth sphere */}
             <mesh ref={earthRef} geometry={geometry}>
                 <meshStandardMaterial
