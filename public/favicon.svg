@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Stylized Moon Horizon -->
+  <circle cx="32" cy="32" r="26" fill="none" stroke="white" stroke-width="3" opacity="0.7"/>
+  
+  <!-- Trajectory Path -->
+  <path d="M 10 32 Q 32 5 54 32" fill="none" stroke="#00FFFF" stroke-width="4" stroke-linecap="round" />
+  
+  <!-- Target/Rover Dot -->
+  <circle cx="54" cy="32" r="3" fill="#00FFFF" />
+</svg>
