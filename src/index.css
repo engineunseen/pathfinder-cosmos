@@ -73,16 +73,20 @@ canvas {
   position: relative;
   font-size: 12px;
   letter-spacing: 0.5px;
+  isolation: isolate;
+  /* Ensure new stacking context for children */
 }
 
 /* Corner bracket decorations */
 .corner {
-  position: absolute;
+  position: absolute !important;
   width: 14px;
   height: 14px;
   border-color: var(--cyan);
   border-style: solid;
   border-width: 0;
+  z-index: 200;
+  /* Ensure corners appear above scanlines */
 }
 
 .corner.tl {
@@ -194,6 +198,8 @@ canvas {
   min-width: 420px;
   max-width: 90vw;
   text-align: center;
+  padding: 10px 24px;
+  /* Reduced vertical padding */
 }
 
 .ai-status {
@@ -295,19 +301,22 @@ canvas {
 }
 
 /* ---- AI INDICATOR ---- */
+/* ---- AI INDICATOR ---- */
 .ai-indicator {
   position: fixed;
-  top: 50%;
+  top: 280px;
+  /* Further lowered to avoid any chance of overlap */
   right: 16px;
-  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
 }
 
 .ai-status-row {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
 }
@@ -317,39 +326,10 @@ canvas {
   letter-spacing: 2px;
   color: var(--green);
   text-shadow: var(--glow-green);
-  writing-mode: vertical-lr;
-  /* Keep vertical? Or horizontal? Original was vertical */
-  text-orientation: mixed;
-}
-
-/* Original had writing-mode vertical. 
-   If I want "CALCULATING" below it, vertical layout is tricky.
-   Let's switch to Horizontal for better readability of the message?
-   Or keep vertical "AI ACTIVE" and horizontal "CALCULATING"?
-   That would look weird.
-   Let's SWITCH to Horizontal layout on the right edge.
-*/
-
-.ai-indicator {
-  position: fixed;
-  top: 150px;
-  /* Below Mission Panel */
-  right: 16px;
-  transform: none;
-  /* Remove centering Y */
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.ai-title {
-  font-size: 12px;
-  letter-spacing: 2px;
-  color: var(--green);
-  text-shadow: var(--glow-green);
-  /* Removed vertical writing mode */
   font-weight: 700;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  /* Removed rotation - standard Top-to-Bottom flow */
 }
 
 .ai-calculating {
@@ -357,6 +337,10 @@ canvas {
   letter-spacing: 1px;
   color: var(--cyan);
   opacity: 0.8;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  margin-top: 10px;
+  /* Removed rotation */
 }
 
 .blink-text {
@@ -397,16 +381,14 @@ canvas {
 
 /* ---- CONTROLS HINT ---- */
 .controls-hint {
-  position: fixed;
-  bottom: 90px;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Position reset to normal flow inside panel */
+  width: 100%;
   font-size: 9px;
   letter-spacing: 1.5px;
-  color: rgba(0, 255, 255, 0.3);
+  color: rgba(0, 255, 255, 0.5);
   white-space: normal;
   text-align: center;
-  max-width: 500px;
+  margin: 0 auto;
 }
 
 /* ---- TOP CENTER LOGOS ---- */
@@ -438,7 +420,7 @@ canvas {
 
 .logo-divider {
   width: 1px;
-  height: 24px;
+  height: 50px;
   background: var(--white);
   opacity: 0.3;
 }
@@ -725,10 +707,10 @@ canvas {
   touch-action: none;
 }
 
-/* ---- SCANLINES EFFECT ---- */
-.hud-overlay::before {
+/* ---- SCANLINES EFFECT (via ::after pseudo-element) ---- */
+.hud-panel::after {
   content: '';
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
@@ -736,10 +718,16 @@ canvas {
   background: repeating-linear-gradient(0deg,
       transparent,
       transparent 2px,
-      rgba(0, 255, 255, 0.015) 2px,
-      rgba(0, 255, 255, 0.015) 4px);
+      rgba(0, 255, 255, 0.15) 2px,
+      rgba(0, 255, 255, 0.15) 4px);
   pointer-events: none;
-  z-index: 999;
+  z-index: 1;
+}
+
+/* Ensure content stays above scanlines — but exclude corners and scanlines-bg */
+.hud-panel>*:not(.corner):not(.scanlines-bg) {
+  position: relative;
+  z-index: 2;
 }
 
 /* ---- RESPONSIVE ---- */

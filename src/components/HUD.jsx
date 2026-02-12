@@ -35,7 +35,10 @@ function TelemetryPanel({ telemetry, lang }) {
 
     return (
         <CornerBrackets className="panel-telemetry">
-            <h2 className="panel-title">{t.telemetry}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(0, 255, 255, 0.3)', paddingBottom: '5px', minHeight: '28px' }}>
+                <h2 className="panel-title" style={{ margin: 0, border: 'none', padding: 0 }}>{t.telemetry}</h2>
+                <div style={{ width: '30px' }}></div>
+            </div>
             <div className="telemetry-row">
                 <span className="label">{t.speed}:</span>
                 <span className="value" style={{ color: C.PRIMARY_INFO }}>
@@ -63,12 +66,31 @@ function TelemetryPanel({ telemetry, lang }) {
 }
 
 // Mission Control panel (Top Right)
-function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, version }) {
+function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings }) {
     const t = STRINGS[lang];
 
     return (
         <CornerBrackets className="panel-mission">
-            <h2 className="panel-title">{t.missionControl}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(0, 255, 255, 0.3)', paddingBottom: '5px', minHeight: '28px' }}>
+                <h2 className="panel-title" style={{ margin: 0, border: 'none', padding: 0 }}>{t.missionControl}</h2>
+                <button
+                    onClick={onOpenSettings}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(0, 255, 255, 0.7)',
+                        fontSize: '20px',
+                        cursor: 'pointer',
+                        padding: '0 5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}
+                >
+                    ⚙
+                </button>
+            </div>
+
             <div className="telemetry-row">
                 <span className="label">{t.time}:</span>
                 <span className="value" style={{ color: C.PRIMARY_INFO }}>
@@ -122,6 +144,10 @@ function ControlPanel({ aiMode, lang, onSetAIMode, gameState }) {
                             </button>
                         ))}
                     </div>
+                    {/* Controls Hint integrated into panel */}
+                    <div style={{ marginTop: '15px', borderTop: '1px solid rgba(0, 255, 255, 0.2)', paddingTop: '10px' }}>
+                        <ControlsHint lang={lang} />
+                    </div>
                 </>
             )}
         </CornerBrackets>
@@ -165,14 +191,100 @@ function GameOverOverlay({ reason, lang, onRestart, safetyScore, elapsedTime }) 
 }
 
 // Settings Modal component
-function SettingsModal({ isOpen, onClose, lang, onLanguageChange }) {
+function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle }) {
     if (!isOpen) return null;
     const t = STRINGS[lang];
+
+    const [localBrightness, setLocalBrightness] = React.useState(brightness || 1.2);
+
+    // Sync local state with prop when prop updates (e.g. from init)
+    React.useEffect(() => {
+        setLocalBrightness(brightness || 1.2);
+    }, [brightness]);
+
+    const handleSliderChange = (e) => {
+        const val = parseFloat(e.target.value);
+        setLocalBrightness(val); // Instant visual update
+        onBrightnessChange(val); // Propagate to app
+    };
+
+    const handleReset = () => {
+        const defaultBrightness = 1.2;
+        const defaultShadow = 0.5;
+        setLocalBrightness(defaultBrightness);
+        onBrightnessChange(defaultBrightness);
+        onShadowChange(defaultShadow);
+        if (chromaticAberration) onChromaticToggle(); // Reset to OFF
+    };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
             <CornerBrackets className="settings-panel" onClick={e => e.stopPropagation()}>
                 <h2 className="panel-title">{t.settings}</h2>
+
+                {/* Brightness Control */}
+                <div className="settings-row">
+                    <span className="label">BRIGHTNESS:</span>
+                    <div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                            type="range"
+                            min="0.1"
+                            max="3.0"
+                            step="0.1"
+                            value={localBrightness}
+                            onChange={handleSliderChange}
+                            onPointerDownCapture={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+                            style={{ width: '150px', accentColor: '#00FFFF', cursor: 'pointer', pointerEvents: 'auto' }}
+                        />
+                        <span style={{ color: '#00FFFF', fontSize: '0.8em', width: '30px' }}>
+                            {localBrightness.toFixed(1)}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Shadow Contrast Control */}
+                <div className="settings-row">
+                    <span className="label">SHADOWS:</span>
+                    <div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                            type="range"
+                            min="0.0"
+                            max="1.0"
+                            step="0.05"
+                            value={shadowContrast || 0.5}
+                            onChange={(e) => onShadowChange(parseFloat(e.target.value))}
+                            onPointerDownCapture={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+                            style={{ width: '150px', accentColor: '#00FFFF', cursor: 'pointer', pointerEvents: 'auto' }}
+                        />
+                        <span style={{ color: '#00FFFF', fontSize: '0.8em', width: '30px' }}>
+                            {(shadowContrast || 0.5).toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Chromatic Aberration Toggle */}
+                <div className="settings-row">
+                    <span className="label">LENS FX:</span>
+                    <button
+                        className="hud-button"
+                        style={{
+                            margin: 0,
+                            borderColor: chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.2)',
+                            color: chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.5)',
+                            minWidth: '60px'
+                        }}
+                        onClick={onChromaticToggle}
+                    >
+                        {chromaticAberration ? 'ON' : 'OFF'}
+                    </button>
+                </div>
+
+                <div style={{ marginTop: '10px', marginBottom: '20px' }}>
+                    <button className="hud-button" style={{ width: '100%', borderColor: '#FFBF00', color: '#FFBF00', fontSize: '11px' }} onClick={handleReset}>
+                        RESET GRAPHICS
+                    </button>
+                </div>
+
                 <div className="settings-row">
                     <span className="label">{t.language}:</span>
                     <div className="language-selector">
@@ -187,6 +299,7 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange }) {
                         ))}
                     </div>
                 </div>
+
                 <button className="hud-button close-btn" onClick={onClose}>
                     <span className="btn-bracket">[</span>
                     {t.close}
@@ -201,16 +314,12 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange }) {
 function TopLogos() {
     return (
         <div className="top-logos">
-            <div className="logo-section nvidia-logo">
-                <svg viewBox="0 0 100 20" className="logo-svg">
-                    <path fill="#76b900" d="M10,0 C4.5,0 0,4.5 0,10 C0,15.5 4.5,20 10,20 C15.5,20 20,15.5 20,10 C20,4.5 15.5,0 10,0 Z M10,18 C5.6,18 2,14.4 2,10 C2,5.6 5.6,2 10,2 C14.4,2 18,5.6 18,10 C18,14.4 14.4,18 10,18 Z M10,4 C11.1,4 12,4.9 12,6 C12,7.1 11.1,8 10,8 C8.9,8 8,7.1 8,6 C8,4.9 8.9,4 10,4 Z M10,12 C7.8,12 6,10.2 6,8 C6,7.5 6.1,7 6.3,6.6 C6.7,6.2 7.3,6 8,6 L8,8 C8,9.1 8.9,10 10,10 L10,12 Z M14,10 C14,12.2 12.2,14 10,14 L10,16 C13.3,16 16,13.3 16,10 C16,9.5 15.9,9 15.7,8.6 C15.3,8.2 14.7,8 14,8 L14,10 Z" />
-                    <text x="25" y="15" fill="white" fontSize="12" fontWeight="bold">NVIDIA</text>
-                </svg>
+            <div className="logo-section">
+                <img src="/Nvidia_logo_.svg" alt="NVIDIA" style={{ height: '48px' }} />
             </div>
             <div className="logo-divider" />
-            <div className="logo-section unseen-logo">
-                <span className="unseen-u">U</span>
-                <span className="unseen-text">UNSEEN</span>
+            <div className="logo-section">
+                <img src="/Unseen_logo.svg" alt="UNSEEN" style={{ height: '54px' }} />
             </div>
         </div>
     );
@@ -315,28 +424,31 @@ export default function HUD({
     onRestart,
     onLanguageChange,
     onMobileInput,
+    brightness, // New prop
+    onBrightnessChange, // New prop
+    shadowContrast,
+    onShadowChange,
+    chromaticAberration,
+    onChromaticToggle
 }) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     return (
         <div className="hud-overlay">
             {/* Top Center: Branding */}
+            {/* Top Center: Branding */}
             <TopLogos />
 
             {/* Top Left: Telemetry */}
             <TelemetryPanel telemetry={telemetry} lang={language} />
 
-            {/* Settings Toggle */}
-            <button className="settings-toggle" onClick={() => setIsSettingsOpen(true)}>
-                ⚙
-            </button>
-
-            {/* Top Right: Mission Control */}
+            {/* Top Right: Mission Control (Includes Settings Toggle) */}
             <MissionPanel
                 targetDistance={targetDistance}
                 lang={language}
                 elapsedTime={elapsedTime}
                 onNewTerrain={onNewTerrain}
+                onOpenSettings={() => setIsSettingsOpen(true)}
             />
 
             {/* Bottom Center: Controls */}
@@ -360,10 +472,7 @@ export default function HUD({
                 </div>
             )}
 
-            {/* Controls hint (desktop only) */}
-            {!isMobile && gameState === 'playing' && (
-                <ControlsHint lang={language} />
-            )}
+            {/* Controls hint moved into ControlPanel */}
 
             {/* Mobile controls */}
             {isMobile && gameState === 'playing' && (
@@ -387,6 +496,12 @@ export default function HUD({
                 onClose={() => setIsSettingsOpen(false)}
                 lang={language}
                 onLanguageChange={onLanguageChange}
+                brightness={brightness}
+                onBrightnessChange={onBrightnessChange}
+                shadowContrast={shadowContrast}
+                onShadowChange={onShadowChange}
+                chromaticAberration={chromaticAberration}
+                onChromaticToggle={onChromaticToggle}
             />
 
             {/* Version Display */}
@@ -394,12 +509,13 @@ export default function HUD({
                 position: 'absolute',
                 bottom: '5px',
                 right: '10px',
-                color: 'rgba(255, 255, 255, 0.3)',
-                fontSize: '10px',
+                color: '#888888',
+                fontSize: '12px',
+                fontWeight: 'bold',
                 fontFamily: 'monospace',
                 pointerEvents: 'none'
             }}>
-                v0.3.5-alpha
+                v0.3.7-alpha
             </div>
         </div>
     );

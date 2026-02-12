@@ -5,7 +5,8 @@ import React, { useEffect, useRef, useState, useCallback, useReducer, useMemo } 
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { Physics } from '@react-three/cannon';
-import { Stars } from '@react-three/drei';
+import { Stars } from './components/Scene'; // Custom Stars with variable brightness
+import { EffectComposer, ChromaticAberration } from '@react-three/postprocessing';
 
 // Store & Constants
 import {
@@ -39,14 +40,13 @@ function PhysicsScene({
   onTelemetryUpdate,
   startPos,
   monteCarloTrajectories,
-  dangerMap
+  dangerMap,
+  shadowContrast
 }) {
   return (
     <>
-      <LunarLighting />
-
+      <LunarLighting shadowContrast={shadowContrast} />
       <LunarTerrain terrainData={terrainData} />
-
       <Rocks rocks={terrainData.rocks} />
 
       {gameState === 'playing' && (
@@ -61,7 +61,6 @@ function PhysicsScene({
       )}
 
       <Earth />
-
       <Beacon position={[terrainData.beacon.x, terrainData.beacon.y, terrainData.beacon.z]} />
 
       <MonteCarloViz
@@ -83,6 +82,8 @@ export default function App() {
     velocity: [0, 0, 0],
     rotation: [0, 0, 0]
   });
+  const telemetryRef = useRef(telemetry);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   const roverRef = useRef();
   const batteryRef = useRef(100);
@@ -94,6 +95,11 @@ export default function App() {
   const [monteCarloTrajectories, setMonteCarloTrajectories] = useState(null);
   const [dangerMap, setDangerMap] = useState(null);
   const mcWorkerRef = useRef(null);
+
+  // Sync telemetry ref
+  useEffect(() => {
+    telemetryRef.current = telemetry;
+  }, [telemetry]);
 
   // Check for mobile
   useEffect(() => {
@@ -117,6 +123,7 @@ export default function App() {
     return inputRef.current;
   }, []);
 
+  // Keyboard input logic
   useEffect(() => {
     const handleKeyDown = (e) => {
       switch (e.code) {
@@ -158,21 +165,19 @@ export default function App() {
       const dt = (t - lastTimeRef.current) / 1000;
       lastTimeRef.current = t;
 
-      if (state.gameState === 'playing') {
+      if (state.gameState === 'playing' && !isCalculating) {
         elapsedRef.current += dt;
         batteryRef.current = Math.max(0, batteryRef.current - dt * 0.05);
 
-        // Check success
         const dx = telemetry.position[0] - terrainData.beacon.x;
         const dy = telemetry.position[1] - terrainData.beacon.y;
         const dz = telemetry.position[2] - terrainData.beacon.z;
         const currentDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        if (currentDist < 5 && state.gameState === 'playing') {
+        if (currentDist < 3 && state.gameState === 'playing') {
           dispatch({ type: 'SET_GAME_STATE', payload: { state: 'success' } });
         }
 
-        // Check failures
         if (batteryRef.current <= 0) {
           dispatch({ type: 'SET_GAME_STATE', payload: { state: 'gameover', reason: 'damage' } });
         }
@@ -182,7 +187,28 @@ export default function App() {
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, [state.gameState, terrainData.beacon, telemetry.position]);
+  }, [state.gameState, terrainData.beacon, telemetry.position, isCalculating]);
+
+  // AI AUTOPILOT CONTROL LOGIC
+  useEffect(() => {
+    if (state.aiMode === AI_MODES.AUTOPILOT && monteCarloTrajectories && state.gameState === 'playing') {
+      const sorted = [...monteCarloTrajectories].sort((a, b) => b.fitness - a.fitness);
+      const best = sorted[0];
+
+      if (best && best.fitness > -9999) {
+        const targetSteer = -best.input.steer;
+        const targetThrottle = best.input.throttle;
+        inputRef.current.left = targetSteer > 0 ? targetSteer : 0;
+        inputRef.current.right = targetSteer < 0 ? -targetSteer : 0;
+        inputRef.current.forward = targetThrottle > 0 ? targetThrottle : 0;
+        inputRef.current.backward = targetThrottle < 0 ? -targetThrottle : 0;
+      } else {
+        inputRef.current.forward = 0;
+        inputRef.current.backward = 0;
+        inputRef.current.brake = true;
+      }
+    }
+  }, [monteCarloTrajectories, state.aiMode, state.gameState]);
 
   // Initialize MC Worker
   useEffect(() => {
@@ -190,6 +216,7 @@ export default function App() {
     mcWorkerRef.current.onmessage = (e) => {
       if (e.data.type === 'SIMULATION_RESULTS') {
         setMonteCarloTrajectories(e.data.payload);
+        setIsCalculating(false);
       }
     };
     return () => mcWorkerRef.current.terminate();
@@ -213,33 +240,41 @@ export default function App() {
   useEffect(() => {
     if (mcWorkerRef.current && state.aiMode !== AI_MODES.OFF && state.gameState === 'playing') {
       const interval = setInterval(() => {
+        setIsCalculating(true);
+
         mcWorkerRef.current.postMessage({
           type: 'RUN_SIMULATION',
           payload: {
+            isAutopilot: state.aiMode === AI_MODES.AUTOPILOT,
             roverState: {
-              position: telemetry.position,
-              velocity: telemetry.velocity,
-              rotation: telemetry.rotation,
-              steerAngle: 0, // Placeholder
+              position: telemetryRef.current.position,
+              velocity: telemetryRef.current.velocity,
+              rotation: telemetryRef.current.rotation,
+              targetPos: [terrainData.beacon.x, terrainData.beacon.y, terrainData.beacon.z],
+              steerAngle: 0,
               throttle: inputRef.current.forward - inputRef.current.backward
             }
           }
         });
-      }, 100);
+      }, 700);
       return () => clearInterval(interval);
     }
-  }, [state.aiMode, state.gameState, telemetry]);
+  }, [state.aiMode, state.gameState, terrainData.beacon]);
 
   const handleRestart = useCallback(() => {
     dispatch({ type: 'RESET_GAME' });
     batteryRef.current = 100;
     elapsedRef.current = 0;
+    setIsCalculating(false);
+    inputRef.current = { forward: 0, backward: 0, left: 0, right: 0, brake: false };
   }, []);
 
   const handleNewTerrain = useCallback(() => {
     dispatch({ type: 'NEW_TERRAIN' });
     batteryRef.current = 100;
     elapsedRef.current = 0;
+    setIsCalculating(false);
+    inputRef.current = { forward: 0, backward: 0, left: 0, right: 0, brake: false };
   }, []);
 
   const targetDistance = useMemo(() => {
@@ -258,15 +293,14 @@ export default function App() {
             gl={{
               antialias: true,
               toneMapping: THREE.ACESFilmicToneMapping,
-              toneMappingExposure: 1.2,
+              toneMappingExposure: state.brightness,
             }}
             camera={{ fov: 60, near: 0.1, far: 2000, position: [0, 10, 15] }}
             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
           >
             <color attach="background" args={['#000000']} />
             <fog attach="fog" args={['#000000', 100, 450]} />
-
-            <Stars />
+            <Stars count={3000} />
 
             <CameraController
               targetPosition={telemetry.position}
@@ -276,10 +310,7 @@ export default function App() {
             <Physics
               key={state.terrainSeed}
               gravity={[0, -LUNAR_GRAVITY, 0]}
-              defaultContactMaterial={{
-                friction: 0.6,
-                restitution: 0.1,
-              }}
+              defaultContactMaterial={{ friction: 0.6, restitution: 0.1 }}
               iterations={10}
               broadphase="SAP"
             >
@@ -294,8 +325,14 @@ export default function App() {
                 startPos={startPos}
                 monteCarloTrajectories={monteCarloTrajectories}
                 dangerMap={dangerMap}
+                shadowContrast={state.shadowContrast}
               />
             </Physics>
+            {state.chromaticAberration && (
+              <EffectComposer>
+                <ChromaticAberration offset={[0.00035, 0.00035]} />
+              </EffectComposer>
+            )}
           </Canvas>
 
           <HUD
@@ -308,6 +345,7 @@ export default function App() {
             targetDistance={targetDistance}
             aiMode={state.aiMode}
             gameState={state.gameState}
+            isCalculating={isCalculating}
             failReason={state.failReason}
             safetyScore={Math.max(0, Math.round(100 - elapsedRef.current * 0.1 - Math.abs(parseFloat(telemetry.pitch)) * 0.5))}
             elapsedTime={elapsedRef.current}
@@ -318,6 +356,12 @@ export default function App() {
             onNewTerrain={handleNewTerrain}
             onRestart={handleRestart}
             onLanguageChange={(l) => dispatch({ type: 'SET_LANGUAGE', payload: l })}
+            brightness={state.brightness}
+            onBrightnessChange={(val) => dispatch({ type: 'SET_BRIGHTNESS', payload: val })}
+            shadowContrast={state.shadowContrast}
+            onShadowChange={(val) => dispatch({ type: 'SET_SHADOW_CONTRAST', payload: val })}
+            chromaticAberration={state.chromaticAberration}
+            onChromaticToggle={() => dispatch({ type: 'TOGGLE_CHROMATIC' })}
             onMobileInput={(inp) => {
               if (inp.toggleAI) dispatch({ type: 'TOGGLE_AI' });
               else inputRef.current = { ...inputRef.current, ...inp };

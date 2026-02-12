@@ -15,7 +15,7 @@ function Earth() {
 
     // Earth texture via procedural sphere with vertex colors
     const geometry = useMemo(() => {
-        const geo = new THREE.SphereGeometry(30, 64, 48);
+        const geo = new THREE.SphereGeometry(30, 64, 64);
         const positions = geo.attributes.position.array;
         const colors = new Float32Array(positions.length);
         const normals = geo.attributes.normal.array;
@@ -37,15 +37,23 @@ function Earth() {
                 Math.sin(lon * 5 + 1) * Math.cos(lat * 3 + 2) * 0.5 +
                 Math.sin(lon * 7 + 3) * Math.cos(lat * 5 + 1) * 0.3;
 
-            if (landNoise > 0.3 && Math.abs(lat) < 1.2) {
+            if (landNoise > 0.3) {
                 r = 0.15 + Math.random() * 0.05;
                 g = 0.35 + Math.random() * 0.1;
                 b = 0.12;
             }
 
-            // Ice caps
-            if (Math.abs(lat) > 1.1) {
-                r = 0.85; g = 0.88; b = 0.92;
+            // Ice caps — smooth gradient transition (avoids hard grey cutoff at poles)
+            const absLat = Math.abs(lat);
+            if (absLat > 0.95) {
+                // Smoothstep: gradual blend from 0.95 to 1.35 radians
+                const iceFactor = Math.min(1.0, (absLat - 0.95) / 0.4);
+                const iceBlend = iceFactor * iceFactor * (3 - 2 * iceFactor); // smoothstep
+                // Add subtle noise to ice for texture variety
+                const iceNoise = Math.sin(lon * 12 + lat * 8) * 0.03;
+                r = r + (0.88 + iceNoise - r) * iceBlend;
+                g = g + (0.91 + iceNoise - g) * iceBlend;
+                b = b + (0.95 + iceNoise - b) * iceBlend;
             }
 
             // Clouds (random patches)

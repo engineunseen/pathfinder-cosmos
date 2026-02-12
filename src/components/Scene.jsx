@@ -1,120 +1,57 @@
-// components/Scene.jsx — Main 3D scene with camera controller
-import React, { useRef, useEffect, useMemo } from 'react';
+// components/Scene.jsx — Lighting, Stars, and Camera Controls
+import React, { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
-export function CameraController({ targetPosition, enabled = true }) {
-    const { camera } = useThree();
-    const offset = useRef(new THREE.Vector3(0, 8, 12));
-    const lookTarget = useRef(new THREE.Vector3());
-    const isDragging = useRef(false);
-    const lastMouse = useRef({ x: 0, y: 0 });
-    const spherical = useRef(new THREE.Spherical(15, Math.PI / 4, 0));
+import { OrbitControls } from '@react-three/drei';
 
-    useEffect(() => {
-        const canvas = document.querySelector('canvas');
-        if (!canvas) return;
+export function CameraController({ targetPosition, enabled }) {
+    const { camera, gl } = useThree();
+    const controlsRef = useRef();
+    const prevTarget = useRef(new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2]));
 
-        const onMouseDown = (e) => {
-            isDragging.current = true;
-            lastMouse.current = { x: e.clientX, y: e.clientY };
-        };
+    useFrame((state, delta) => {
+        if (!enabled || !controlsRef.current) return;
 
-        const onMouseMove = (e) => {
-            if (!isDragging.current) return;
-            const dx = e.clientX - lastMouse.current.x;
-            const dy = e.clientY - lastMouse.current.y;
-            lastMouse.current = { x: e.clientX, y: e.clientY };
+        const tx = targetPosition[0];
+        const ty = targetPosition[1];
+        const tz = targetPosition[2];
 
-            spherical.current.theta -= dx * 0.005;
-            spherical.current.phi = Math.max(0.2, Math.min(Math.PI / 2.2,
-                spherical.current.phi + dy * 0.005
-            ));
-        };
+        // 1. Calculate how much the rover moved since last frame
+        const dx = tx - prevTarget.current.x;
+        const dy = ty - prevTarget.current.y;
+        const dz = tz - prevTarget.current.z;
 
-        const onMouseUp = () => { isDragging.current = false; };
+        // 2. Move camera by the same amount (Follow Mode)
+        // This preserves the relative offset/rotation set by the user via mouse
+        camera.position.x += dx;
+        camera.position.y += dy;
+        camera.position.z += dz;
 
-        const onWheel = (e) => {
-            spherical.current.radius = Math.max(5, Math.min(40,
-                spherical.current.radius + e.deltaY * 0.02
-            ));
-        };
+        // 3. Update OrbitControls target to look at new position
+        controlsRef.current.target.set(tx, ty, tz);
 
-        // Touch events for mobile camera
-        let touchStart = null;
-        const onTouchStart = (e) => {
-            if (e.touches.length === 1) {
-                // Check if touch is on the right half of the screen
-                if (e.touches[0].clientX > window.innerWidth * 0.5) {
-                    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                }
-            }
-        };
-        const onTouchMove = (e) => {
-            if (!touchStart || e.touches.length !== 1) return;
-            if (e.touches[0].clientX < window.innerWidth * 0.5) return;
-            const dx = e.touches[0].clientX - touchStart.x;
-            const dy = e.touches[0].clientY - touchStart.y;
-            touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            spherical.current.theta -= dx * 0.005;
-            spherical.current.phi = Math.max(0.2, Math.min(Math.PI / 2.2,
-                spherical.current.phi + dy * 0.005
-            ));
-        };
-        const onTouchEnd = () => { touchStart = null; };
+        // 4. Update history
+        prevTarget.current.set(tx, ty, tz);
 
-        canvas.addEventListener('mousedown', onMouseDown);
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
-        canvas.addEventListener('wheel', onWheel, { passive: true });
-        canvas.addEventListener('touchstart', onTouchStart, { passive: true });
-        canvas.addEventListener('touchmove', onTouchMove, { passive: true });
-        canvas.addEventListener('touchend', onTouchEnd, { passive: true });
-
-        return () => {
-            canvas.removeEventListener('mousedown', onMouseDown);
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
-            canvas.removeEventListener('wheel', onWheel);
-            canvas.removeEventListener('touchstart', onTouchStart);
-            canvas.removeEventListener('touchmove', onTouchMove);
-            canvas.removeEventListener('touchend', onTouchEnd);
-        };
-    }, []);
-
-    useFrame(() => {
-        if (!enabled || !targetPosition) return;
-
-        const target = new THREE.Vector3(
-            targetPosition[0],
-            targetPosition[1],
-            targetPosition[2]
-        );
-
-        // Calculate camera position from spherical coordinates
-        const camOffset = new THREE.Vector3();
-        camOffset.setFromSpherical(spherical.current);
-
-        const desiredPos = target.clone().add(camOffset);
-
-        // Smooth follow
-        camera.position.lerp(desiredPos, 0.08);
-
-        // Look at target
-        lookTarget.current.lerp(target, 0.1);
-        camera.lookAt(lookTarget.current);
+        controlsRef.current.update();
     });
 
-    return null;
+    return <OrbitControls ref={controlsRef} args={[camera, gl.domElement]} enableDamping dampingFactor={0.1} />;
 }
 
-export function LunarLighting() {
+
+export function LunarLighting({ shadowContrast = 0.5 }) {
+    // Contrast slider reduces fill light (ambient + hemi) to darken shadows
+    // 0.0 = Bright Shadows, 1.0 = Dark Shadows
+    const fillFactor = Math.max(0.05, 1.0 - (shadowContrast * 0.9));
+
     return (
         <>
-            {/* Harsh directional sunlight (vacuum lighting — no scatter) */}
+            {/* Primary Harsh Sunlight */}
             <directionalLight
                 position={[100, 80, -50]}
-                intensity={3}
+                intensity={3.2}
                 color="#ffffff"
                 castShadow
                 shadow-mapSize-width={4096}
@@ -124,38 +61,67 @@ export function LunarLighting() {
                 shadow-camera-right={80}
                 shadow-camera-top={80}
                 shadow-camera-bottom={-80}
-                shadow-bias={-0.001}
+                shadow-bias={-0.0005}
             />
 
-            {/* Very dim ambient (space has no atmospheric scatter) */}
-            <ambientLight intensity={0.15} color="#445566" />
+            {/* Earthshine (Blueish bounce from the sky) */}
+            <ambientLight intensity={0.25 * fillFactor} color="#404060" />
 
-            {/* Subtle fill from Earth direction */}
+            {/* Lunar Bounce (Hemispheric lighting for soft shadows) */}
+            <hemisphereLight
+                skyColor="#0a0a15"
+                groundColor="#222233"
+                intensity={0.6 * fillFactor}
+            />
+
+            {/* Subtle backlight for rim lighting on craters */}
             <directionalLight
-                position={[200, 30, -400]}
-                intensity={0.15}
+                position={[-150, 40, 200]}
+                intensity={0.15 * fillFactor}
                 color="#4488cc"
             />
         </>
     );
 }
 
-export function Stars({ count = 2500 }) {
-    const positions = useMemo(() => {
+export function Stars({ count = 3000 }) {
+    const [positions, colors] = useMemo(() => {
         const pos = new Float32Array(count * 3);
+        const cols = new Float32Array(count * 3);
+
         for (let i = 0; i < count; i++) {
-            const r = 700 + Math.random() * 300;
+            // Distance 700 to 1200
+            const r = 700 + Math.random() * 500;
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(2 * Math.random() - 1);
+
             pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            pos[i * 3 + 1] = Math.abs(r * Math.cos(phi));
+            pos[i * 3 + 1] = Math.abs(r * Math.cos(phi)); // Mostly above horizon
             pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+
+            // Varied brightness and slight color tints
+            const brightness = 0.5 + Math.random() * 0.5;
+            const tint = Math.random();
+
+            if (tint < 0.1) { // Blueish
+                cols[i * 3] = brightness * 0.8;
+                cols[i * 3 + 1] = brightness * 0.8;
+                cols[i * 3 + 2] = brightness;
+            } else if (tint < 0.2) { // Reddish/Amber
+                cols[i * 3] = brightness;
+                cols[i * 3 + 1] = brightness * 0.8;
+                cols[i * 3 + 2] = brightness * 0.7;
+            } else { // Pure white
+                cols[i * 3] = brightness;
+                cols[i * 3 + 1] = brightness;
+                cols[i * 3 + 2] = brightness;
+            }
         }
-        return pos;
+        return [pos, cols];
     }, [count]);
 
     return (
-        <points>
+        <points frustumCulled={false}>
             <bufferGeometry>
                 <bufferAttribute
                     attach="attributes-position"
@@ -163,8 +129,21 @@ export function Stars({ count = 2500 }) {
                     array={positions}
                     itemSize={3}
                 />
+                <bufferAttribute
+                    attach="attributes-color"
+                    count={count}
+                    array={colors}
+                    itemSize={3}
+                />
             </bufferGeometry>
-            <pointsMaterial size={1.5} color="#888888" sizeAttenuation={false} />
+            <pointsMaterial
+                size={1.6}
+                vertexColors
+                sizeAttenuation={false}
+                transparent
+                opacity={1}
+                fog={false} // CRITICAL: Stars should not be affected by fog
+            />
         </points>
     );
 }

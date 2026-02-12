@@ -1,17 +1,10 @@
 // monteCarlo.worker.js — Web Worker for asynchronous trajectory prediction
 // This runs in a separate thread to keep the main FPS high
 
-// This runs in a separate thread to keep the main FPS high
-
-
-// We need to duplicate the terrain logic or import it carefully if we want to share code.
-// For a worker, it's often safer to have self-contained logic or pass the heightmap data buffer.
-// Here we receive the heightmap buffer from the main thread to perform lookups.
-
 const LUNAR_GRAVITY = 1.62;
-const PREDICTION_HORIZON = 3.0;
-const PREDICTION_STEPS = 20;
-const MONTE_CARLO_SAMPLES = 30; // Reduced to prevent frame spikes
+const PREDICTION_HORIZON = 4.0; // Increased for better foresight
+const PREDICTION_STEPS = 25;
+const MONTE_CARLO_SAMPLES = 40; // Balanced quality/speed
 
 let terrainData = null; // { heightData, size, segments }
 
@@ -85,45 +78,45 @@ self.onmessage = function (e) {
     const { type, payload } = e.data;
 
     if (type === 'SET_TERRAIN') {
-        // Receive the large heightmap buffer once
-        terrainData = payload; // { heightData: Float32Array, size, segments }
-        console.log('[Worker] Terrain data received');
+        terrainData = payload;
     }
 
     if (type === 'RUN_SIMULATION') {
         if (!terrainData) return;
-
-        const { roverState } = payload;
-        const results = runSimulation(roverState);
-
-        // Send back results
+        const { roverState, isAutopilot } = payload;
+        const results = runSimulation(roverState, isAutopilot);
         self.postMessage({ type: 'SIMULATION_RESULTS', payload: results });
     }
 };
 
-function runSimulation(state) {
+function runSimulation(state, isAutopilot) {
     const {
         position,    // [x, y, z]
         velocity,    // [vx, vy, vz]
         rotation,    // [pitch, yaw, roll]
         steerAngle,
         throttle,
+        targetPos,   // Added for autopilot heuristic
     } = state;
 
     const trajectories = [];
     const dt = PREDICTION_HORIZON / PREDICTION_STEPS;
-    // Use a changing seed for variation
-    const rng = seededRandom(Date.now() + Math.random() * 1000);
+    const rng = seededRandom(Date.now());
 
     for (let sample = 0; sample < MONTE_CARLO_SAMPLES; sample++) {
-        // Variations
-        // We assume the AI tries to correct the path, or physics uncertainty
-        // High variance in steering = uncertainty in traction
-        const steerVariation = (rng() - 0.5) * 0.5;
-        const throttleVariation = (rng() - 0.5) * 0.2;
+        let simSteer, simThrottle;
 
-        const simSteer = steerAngle + steerVariation;
-        const simThrottle = Math.max(-1, Math.min(1, throttle + throttleVariation));
+        if (isAutopilot) {
+            // EXPLORATION: Try completely random steering and forward-biased throttle
+            simSteer = (rng() - 0.5) * 2.0; // full range [-1, 1]
+            simThrottle = 0.4 + rng() * 0.6; // bias toward forward [0.4, 1.0]
+        } else {
+            // PREDICTION: Noise around current user input
+            const steerVariation = (rng() - 0.5) * 0.4;
+            const throttleVariation = (rng() - 0.5) * 0.2;
+            simSteer = steerAngle + steerVariation;
+            simThrottle = throttle + throttleVariation;
+        }
 
         const path = [];
         let px = position[0];
@@ -140,54 +133,42 @@ function runSimulation(state) {
         let maxTilt = 0;
 
         for (let step = 0; step < PREDICTION_STEPS; step++) {
-            // --- Simplified Physics Model (Kinematic) ---
-
             const speed = Math.sqrt(vx * vx + vz * vz);
 
-            // Steering affects Yaw
-            // At higher speeds, steering is more sensitive but traction loss is possible
-            // This is a simplified bicycle model
-            yaw += simSteer * speed * dt * 0.25;
-
+            // Simplified bicycle model
+            yaw += simSteer * speed * dt * 0.2;
             const fwdX = -Math.sin(yaw);
             const fwdZ = -Math.cos(yaw);
 
-            // Force
-            const force = simThrottle * 12; // Adjusted engine power approximation
+            // Driving force
+            const force = simThrottle * 15;
             vx += fwdX * force * dt;
             vz += fwdZ * force * dt;
 
-            // Drag/Friction
-            vx *= 0.96;
-            vz *= 0.96;
+            // Resistance
+            vx *= 0.95;
+            vz *= 0.95;
 
-            // Position update
+            // Integration
             px += vx * dt;
             pz += vz * dt;
-
-            // Gravity
             vy -= LUNAR_GRAVITY * dt;
             py += vy * dt;
 
-            // Terrain Collision
+            // Terrain interaction
             const terrainHeight = getHeightAtPosition(terrainData.heightData, terrainData.size, terrainData.segments, px, pz);
-
             if (py < terrainHeight + 0.5) {
                 py = terrainHeight + 0.5;
                 vy = 0;
-
-                // Orient to normal
                 const normal = getNormalAtPosition(terrainData.heightData, terrainData.size, terrainData.segments, px, pz);
-                // Simple lerp orientation
                 pitch = pitch * 0.5 + Math.asin(-normal[2]) * 0.5;
                 rollAngle = rollAngle * 0.5 + Math.asin(normal[0]) * 0.5;
             }
 
-            // Check Tilt Risk
-            const pitchDeg = Math.abs(pitch * 180 / Math.PI);
-            const rollDeg = Math.abs(rollAngle * 180 / Math.PI);
-            maxTilt = Math.max(pitchDeg, rollDeg);
-
+            // Tilt/Slope limits
+            const pDeg = Math.abs(pitch * 180 / Math.PI);
+            const rDeg = Math.abs(rollAngle * 180 / Math.PI);
+            maxTilt = Math.max(pDeg, rDeg);
             const slope = getSlopeAtPosition(terrainData.heightData, terrainData.size, terrainData.segments, px, pz);
 
             if (maxTilt > 55 || slope > 50) risk = 'critical';
@@ -195,18 +176,29 @@ function runSimulation(state) {
                 if (risk !== 'critical') risk = 'warning';
             }
 
-            // Bounds check
-            if (Math.abs(px) > terrainData.size / 2 || Math.abs(pz) > terrainData.size / 2) {
+            // Boundary
+            if (Math.abs(px) > terrainData.size / 2 - 2 || Math.abs(pz) > terrainData.size / 2 - 2) {
                 risk = 'critical';
             }
 
             path.push([px, py + 0.2, pz]);
+            if (risk === 'critical') break; // Path ends in crash
+        }
+
+        // Calculate progress toward target
+        let finalDist = 9999;
+        if (targetPos) {
+            const dx = px - targetPos[0];
+            const dz = pz - targetPos[2];
+            finalDist = Math.sqrt(dx * dx + dz * dz);
         }
 
         trajectories.push({
-            path, // Array of [x,y,z]
-            risk, // 'safe', 'warning', 'critical'
-            maxTilt
+            path,
+            risk,
+            maxTilt,
+            input: { throttle: simThrottle, steer: simSteer },
+            fitness: (risk === 'safe' ? 1000 : risk === 'warning' ? 500 : 0) - finalDist
         });
     }
 

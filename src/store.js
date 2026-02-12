@@ -41,9 +41,12 @@ const initialState = {
     elapsedTime: 0,
     terrainSeed: Math.random() * 10000,
     monteCarloResults: null,
-    roverPosition: [0, 5, 0],
+    roverPosition: [0, 2, 0],
     roverRotation: [0, 0, 0],
     inputState: { forward: 0, backward: 0, left: 0, right: 0, brake: false },
+    brightness: 1.2, // Exposure regulator
+    shadowContrast: 0.5, // Shadow darkness regulator
+    chromaticAberration: false, // OFF by default
 };
 
 // ======== REDUCER ========
@@ -59,6 +62,12 @@ function gameReducer(state, action) {
         }
         case 'SET_AI_MODE':
             return { ...state, aiMode: action.payload };
+        case 'SET_BRIGHTNESS':
+            return { ...state, brightness: action.payload };
+        case 'SET_SHADOW_CONTRAST':
+            return { ...state, shadowContrast: action.payload };
+        case 'TOGGLE_CHROMATIC':
+            return { ...state, chromaticAberration: !state.chromaticAberration };
         case 'UPDATE_TELEMETRY':
             return { ...state, ...action.payload };
         case 'SET_GAME_STATE':
