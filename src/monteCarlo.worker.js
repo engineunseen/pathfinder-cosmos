@@ -2,9 +2,9 @@
 // This runs in a separate thread to keep the main FPS high
 
 const LUNAR_GRAVITY = 1.62;
-const PREDICTION_HORIZON = 4.0; // Increased for better foresight
-const PREDICTION_STEPS = 25;
-const MONTE_CARLO_SAMPLES = 40; // Balanced quality/speed
+const PREDICTION_HORIZON = 6.0; // Increased for better foresight (brake distance)
+const PREDICTION_STEPS = 35; // Better curve resolution
+const MONTE_CARLO_SAMPLES = 60; // Balanced quality/speed
 
 let terrainData = null; // { heightData, size, segments }
 
@@ -103,16 +103,25 @@ function runSimulation(state, isAutopilot) {
     const dt = PREDICTION_HORIZON / PREDICTION_STEPS;
     const rng = seededRandom(Date.now());
 
+    // Metrics collection
+    const severityScores = []; // For sCVaR
+    const margins = [];        // For SMaR
+
     for (let sample = 0; sample < MONTE_CARLO_SAMPLES; sample++) {
         let simSteer, simThrottle;
 
         if (isAutopilot) {
-            // EXPLORATION: Try completely random steering and forward-biased throttle
-            simSteer = (rng() - 0.5) * 2.0; // full range [-1, 1]
-            simThrottle = 0.4 + rng() * 0.6; // bias toward forward [0.4, 1.0]
+            // EXPLORATION: Try completely random steering and forward/backward throttle
+            simSteer = (rng() - 0.5) * 2.5; // Wider exploration
+            if (rng() < 0.2) { // 20% chance to try reverse gear
+                simThrottle = -0.5 - rng() * 0.5; // [-0.5, -1.0]
+                // When reversing, steering effect is inverted, but physics handles that via velocity
+            } else {
+                simThrottle = 0.3 + rng() * 0.7; // bias toward forward [0.3, 1.0]
+            }
         } else {
             // PREDICTION: Noise around current user input
-            const steerVariation = (rng() - 0.5) * 0.4;
+            const steerVariation = (rng() - 0.5) * 2.5; // Wider fan (±1.25 rad spread ~ ±70 deg)
             const throttleVariation = (rng() - 0.5) * 0.2;
             simSteer = steerAngle + steerVariation;
             simThrottle = throttle + throttleVariation;
@@ -122,15 +131,16 @@ function runSimulation(state, isAutopilot) {
         let px = position[0];
         let py = position[1];
         let pz = position[2];
-        let vx = velocity[0];
-        let vy = velocity[1];
-        let vz = velocity[2];
+        let vx = velocity[0] || 0; // Guard against NaN
+        let vy = velocity[1] || 0;
+        let vz = velocity[2] || 0;
         let yaw = rotation[1];
         let pitch = rotation[0];
         let rollAngle = rotation[2];
 
         let risk = 'safe';
         let maxTilt = 0;
+        let minSafetyMargin = 999; // Degrees until rollover (approx)
 
         for (let step = 0; step < PREDICTION_STEPS; step++) {
             const speed = Math.sqrt(vx * vx + vz * vz);
@@ -140,14 +150,16 @@ function runSimulation(state, isAutopilot) {
             const fwdX = -Math.sin(yaw);
             const fwdZ = -Math.cos(yaw);
 
-            // Driving force
-            const force = simThrottle * 15;
-            vx += fwdX * force * dt;
-            vz += fwdZ * force * dt;
+            // Driving force (Linked to Rover.jsx: Mass 150, Force 120 => Accel ~0.8)
+            const forceAccel = simThrottle * 0.8;
+            vx += fwdX * forceAccel * dt;
+            vz += fwdZ * forceAccel * dt;
 
-            // Resistance
-            vx *= 0.95;
-            vz *= 0.95;
+            // Resistance (Linked to Rover.jsx: linearDamping 0.15)
+            // Cannon damping approximation: v *= (1 - damping * dt)
+            const dampingFactor = Math.max(0, 1 - 0.15 * dt);
+            vx *= dampingFactor;
+            vz *= dampingFactor;
 
             // Integration
             px += vx * dt;
@@ -168,13 +180,27 @@ function runSimulation(state, isAutopilot) {
             // Tilt/Slope limits
             const pDeg = Math.abs(pitch * 180 / Math.PI);
             const rDeg = Math.abs(rollAngle * 180 / Math.PI);
-            maxTilt = Math.max(pDeg, rDeg);
+            const currentTilt = Math.max(pDeg, rDeg);
+            maxTilt = Math.max(maxTilt, currentTilt);
+
             const slope = getSlopeAtPosition(terrainData.heightData, terrainData.size, terrainData.segments, px, pz);
 
-            if (maxTilt > 55 || slope > 50) risk = 'critical';
-            else if (maxTilt > 35 || slope > 35) {
+            // Risk Assessment
+            let distToTarget = 999;
+            if (targetPos) {
+                distToTarget = Math.sqrt((px - targetPos[0]) ** 2 + (pz - targetPos[2]) ** 2);
+            }
+            const isNearTarget = distToTarget < 5.0;
+            const tiltThreshold = isNearTarget ? 75 : 55; // Relax risk near target
+            const slopeThreshold = isNearTarget ? 70 : 50;
+
+            if (currentTilt > tiltThreshold || slope > slopeThreshold) risk = 'critical';
+            else if (currentTilt > 20 || slope > 20) {
                 if (risk !== 'critical') risk = 'warning';
             }
+
+            // Update safety margin (how close are we to 60 deg rollover?)
+            minSafetyMargin = Math.min(minSafetyMargin, 60 - currentTilt);
 
             // Boundary
             if (Math.abs(px) > terrainData.size / 2 - 2 || Math.abs(pz) > terrainData.size / 2 - 2) {
@@ -182,7 +208,12 @@ function runSimulation(state, isAutopilot) {
             }
 
             path.push([px, py + 0.2, pz]);
-            if (risk === 'critical') break; // Path ends in crash
+            if (risk === 'critical') {
+                // Penalty for collision/critical failure
+                maxTilt = 90; // Max severity
+                minSafetyMargin = -10; // Negative margin
+                break;
+            }
         }
 
         // Calculate progress toward target
@@ -198,9 +229,33 @@ function runSimulation(state, isAutopilot) {
             risk,
             maxTilt,
             input: { throttle: simThrottle, steer: simSteer },
-            fitness: (risk === 'safe' ? 1000 : risk === 'warning' ? 500 : 0) - finalDist
+            // Pure fan-based fitness: prefer green paths that get closer to target
+            fitness: (risk === 'safe' ? 2000 : risk === 'warning' ? 500 : -10000) - finalDist
         });
+
+        severityScores.push(maxTilt); // Simplified severity for now
+        margins.push(minSafetyMargin);
     }
 
-    return trajectories;
+    // --- Calculate sCVaR and SMaR ---
+    // sCVaR_alpha (alpha = 0.95): Average of worst 5% severities
+    severityScores.sort((a, b) => b - a); // Descending
+    const cutoffIndex = Math.ceil(severityScores.length * 0.05);
+    let sCVaRSum = 0;
+    for (let i = 0; i < cutoffIndex; i++) sCVaRSum += severityScores[i];
+    const sCVaR = (cutoffIndex > 0) ? (sCVaRSum / cutoffIndex) : 0;
+
+    // SMaR_alpha (alpha = 0.95): 5th percentile safety margin
+    margins.sort((a, b) => a - b); // Ascending
+    const smarIndex = Math.floor(margins.length * 0.05);
+    const SMaR = margins[smarIndex] || 0;
+
+    // Return extended results
+    return {
+        trajectories,
+        metrics: {
+            sCVaR: sCVaR.toFixed(1),
+            SMaR: SMaR.toFixed(1)
+        }
+    };
 }

@@ -6,9 +6,9 @@ import * as THREE from 'three';
 import { COLORS } from '../store';
 
 const RISK_COLORS = {
-    safe: new THREE.Color(COLORS.SAFE_PATH).multiplyScalar(15), // HDR Glow
-    warning: new THREE.Color(COLORS.WARNING_PATH).multiplyScalar(12),
-    critical: new THREE.Color(COLORS.CRITICAL_PATH).multiplyScalar(20),
+    safe: new THREE.Color(COLORS.SAFE_PATH).multiplyScalar(2), // Brighter
+    warning: new THREE.Color(COLORS.WARNING_PATH).multiplyScalar(2),
+    critical: new THREE.Color(COLORS.CRITICAL_PATH).multiplyScalar(2),
 };
 
 function TrajectoryLine({ path, risk }) {
@@ -25,10 +25,10 @@ function TrajectoryLine({ path, risk }) {
         <Line
             points={points}
             color={color}
-            lineWidth={3} // In pixels (default)
+            lineWidth={5} // Thicker lines
             transparent
-            opacity={risk === 'critical' ? 0.8 : 0.5}
-            vertexColors={false} // Solid color for now, for better glow
+            opacity={risk === 'critical' ? 0.9 : 0.6}
+            vertexColors={false}
         />
     );
 }

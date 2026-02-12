@@ -25,7 +25,9 @@ import Rocks from './components/Rocks';
 import { Earth, Beacon } from './components/EarthAndBeacon';
 import MonteCarloViz from './components/MonteCarloViz';
 import HUD from './components/HUD';
+
 import { LunarLighting, CameraController } from './components/Scene';
+import Dust from './components/Dust';
 
 // Terrain Generation Utility
 import { generateTerrainData } from './terrain';
@@ -93,6 +95,7 @@ export default function App() {
 
   // Monte Carlo state
   const [monteCarloTrajectories, setMonteCarloTrajectories] = useState(null);
+  const [riskMetrics, setRiskMetrics] = useState({ sCVaR: 0, SMaR: 0 }); // New metrics
   const [dangerMap, setDangerMap] = useState(null);
   const mcWorkerRef = useRef(null);
 
@@ -189,33 +192,83 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [state.gameState, terrainData.beacon, telemetry.position, isCalculating]);
 
-  // AI AUTOPILOT CONTROL LOGIC
+  // AI AUTOPILOT CONTROL LOGIC — follows the Monte Carlo fan
   useEffect(() => {
     if (state.aiMode === AI_MODES.AUTOPILOT && monteCarloTrajectories && state.gameState === 'playing') {
+      // Sort all trajectories by fitness (highest = greenest + closest to target)
       const sorted = [...monteCarloTrajectories].sort((a, b) => b.fitness - a.fitness);
       const best = sorted[0];
 
-      if (best && best.fitness > -9999) {
-        const targetSteer = -best.input.steer;
-        const targetThrottle = best.input.throttle;
-        inputRef.current.left = targetSteer > 0 ? targetSteer : 0;
-        inputRef.current.right = targetSteer < 0 ? -targetSteer : 0;
-        inputRef.current.forward = targetThrottle > 0 ? targetThrottle : 0;
-        inputRef.current.backward = targetThrottle < 0 ? -targetThrottle : 0;
+      if (best && best.fitness > -5000) {
+        // Determine the best direction: forward or reverse
+        const bestIsForward = best.input.throttle >= 0;
+
+        // Filter top trajectories by the SAME direction as the best path
+        const sameDirection = sorted.filter(t =>
+          bestIsForward ? t.input.throttle >= 0 : t.input.throttle < 0
+        );
+        const topN = sameDirection.slice(0, Math.min(10, sameDirection.length));
+
+        // Average steering from consensus group for stable direction
+        let avgSteer = 0;
+        let avgThrottle = 0;
+        for (const t of topN) {
+          avgSteer += t.input.steer;
+          avgThrottle += t.input.throttle;
+        }
+        avgSteer /= topN.length;
+        avgThrottle /= topN.length;
+
+        const targetSteer = -avgSteer;
+        inputRef.current.left = targetSteer > 0 ? Math.min(targetSteer, 1) : 0;
+        inputRef.current.right = targetSteer < 0 ? Math.min(-targetSteer, 1) : 0;
+
+        // Modulate speed based on risk metrics (sCVaR & SMaR)
+        let speedFactor = 1.0;
+        if (riskMetrics.SMaR !== undefined && riskMetrics.SMaR < 25) {
+          speedFactor *= 0.5; // SMaR low = less margin = slow down
+        }
+        if (riskMetrics.sCVaR !== undefined && riskMetrics.sCVaR > 50) {
+          speedFactor *= 0.3; // sCVaR high = big consequences = slow down
+        }
+
+        const scaledThrottle = avgThrottle * speedFactor;
+
+        if (bestIsForward) {
+          inputRef.current.forward = Math.max(0.2, Math.min(scaledThrottle, 1));
+          inputRef.current.backward = 0;
+        } else {
+          // Reversing to escape — use moderate reverse speed
+          inputRef.current.forward = 0;
+          inputRef.current.backward = Math.min(Math.abs(scaledThrottle), 0.5);
+        }
+        inputRef.current.brake = false;
       } else {
+        // Extremely rare: ALL 60 paths are catastrophic
+        // Slowly creep backward with slight random steering to escape
         inputRef.current.forward = 0;
-        inputRef.current.backward = 0;
-        inputRef.current.brake = true;
+        inputRef.current.backward = 0.3;
+        inputRef.current.left = Math.random() > 0.5 ? 0.5 : 0;
+        inputRef.current.right = Math.random() > 0.5 ? 0.5 : 0;
+        inputRef.current.brake = false;
       }
     }
-  }, [monteCarloTrajectories, state.aiMode, state.gameState]);
+  }, [monteCarloTrajectories, state.aiMode, state.gameState, riskMetrics]);
+
+  // Reset inputs when switching modes to prevent 'stuck' controls
+  useEffect(() => {
+    inputRef.current = { forward: 0, backward: 0, left: 0, right: 0, brake: false };
+  }, [state.aiMode]);
 
   // Initialize MC Worker
   useEffect(() => {
     mcWorkerRef.current = new Worker(new URL('./monteCarlo.worker.js', import.meta.url), { type: 'module' });
     mcWorkerRef.current.onmessage = (e) => {
       if (e.data.type === 'SIMULATION_RESULTS') {
-        setMonteCarloTrajectories(e.data.payload);
+        // Handle new data format { trajectories, metrics }
+        const { trajectories, metrics } = e.data.payload;
+        setMonteCarloTrajectories(trajectories);
+        if (metrics) setRiskMetrics(metrics);
         setIsCalculating(false);
       }
     };
@@ -258,6 +311,10 @@ export default function App() {
         });
       }, 700);
       return () => clearInterval(interval);
+    } else if (state.aiMode === AI_MODES.OFF) {
+      // Clear metrics when AI is off
+      setRiskMetrics({ sCVaR: undefined, SMaR: undefined });
+      setMonteCarloTrajectories(null);
     }
   }, [state.aiMode, state.gameState, terrainData.beacon]);
 
@@ -301,6 +358,7 @@ export default function App() {
             <color attach="background" args={['#000000']} />
             <fog attach="fog" args={['#000000', 100, 450]} />
             <Stars count={3000} />
+            <Dust />
 
             <CameraController
               targetPosition={telemetry.position}
@@ -346,6 +404,7 @@ export default function App() {
             aiMode={state.aiMode}
             gameState={state.gameState}
             isCalculating={isCalculating}
+            riskMetrics={riskMetrics}
             failReason={state.failReason}
             safetyScore={Math.max(0, Math.round(100 - elapsedRef.current * 0.1 - Math.abs(parseFloat(telemetry.pitch)) * 0.5))}
             elapsedTime={elapsedRef.current}

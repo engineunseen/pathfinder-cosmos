@@ -61,12 +61,23 @@ function TelemetryPanel({ telemetry, lang }) {
                 <span className="label">{t.battery}:</span>
                 <BatteryBar value={telemetry.battery || 100} />
             </div>
+            {/* sCVaR Integrated Here */}
+            {telemetry.sCVaR !== undefined && (
+                <div className="telemetry-row" style={{ marginTop: '5px', borderTop: '1px solid rgba(0, 255, 255, 0.2)', paddingTop: '5px' }}>
+                    <span className="label">sCVaR:</span>
+                    <span className="value" style={{
+                        color: telemetry.sCVaR > 50 ? C.CRITICAL_PATH : telemetry.sCVaR > 30 ? C.WARNING_PATH : C.SAFE_PATH
+                    }}>
+                        {parseFloat(telemetry.sCVaR).toFixed(1)} u
+                    </span>
+                </div>
+            )}
         </CornerBrackets>
     );
 }
 
 // Mission Control panel (Top Right)
-function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings }) {
+function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, telemetry }) {
     const t = STRINGS[lang];
 
     return (
@@ -103,6 +114,17 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
                     {targetDistance.toFixed(0)} {t.meters}
                 </span>
             </div>
+            {/* SMaR Integrated Here */}
+            {telemetry && telemetry.SMaR !== undefined && (
+                <div className="telemetry-row">
+                    <span className="label">SMaR:</span>
+                    <span className="value" style={{
+                        color: telemetry.SMaR < 10 ? C.CRITICAL_PATH : telemetry.SMaR < 25 ? C.WARNING_PATH : C.SAFE_PATH
+                    }}>
+                        {parseFloat(telemetry.SMaR).toFixed(1)} m
+                    </span>
+                </div>
+            )}
             <button className="hud-button" onClick={onNewTerrain}>
                 <span className="btn-bracket">[</span>
                 {t.generateNewLandscape}
@@ -408,6 +430,8 @@ function MobileControls({ onInputChange }) {
     );
 }
 
+
+
 export default function HUD({
     telemetry,
     targetDistance,
@@ -429,7 +453,8 @@ export default function HUD({
     shadowContrast,
     onShadowChange,
     chromaticAberration,
-    onChromaticToggle
+    onChromaticToggle,
+    riskMetrics // New prop
 }) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -440,7 +465,7 @@ export default function HUD({
             <TopLogos />
 
             {/* Top Left: Telemetry */}
-            <TelemetryPanel telemetry={telemetry} lang={language} />
+            <TelemetryPanel telemetry={{ ...telemetry, sCVaR: riskMetrics?.sCVaR }} lang={language} />
 
             {/* Top Right: Mission Control (Includes Settings Toggle) */}
             <MissionPanel
@@ -449,6 +474,7 @@ export default function HUD({
                 elapsedTime={elapsedTime}
                 onNewTerrain={onNewTerrain}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                telemetry={{ SMaR: riskMetrics?.SMaR }}
             />
 
             {/* Bottom Center: Controls */}
@@ -478,6 +504,8 @@ export default function HUD({
             {isMobile && gameState === 'playing' && (
                 <MobileControls onInputChange={onMobileInput} />
             )}
+
+
 
             {/* Game over overlay */}
             {(gameState === 'gameover' || gameState === 'success') && (
@@ -515,7 +543,7 @@ export default function HUD({
                 fontFamily: 'monospace',
                 pointerEvents: 'none'
             }}>
-                v0.3.7-alpha
+                v0.6.1-alpha
             </div>
         </div>
     );
