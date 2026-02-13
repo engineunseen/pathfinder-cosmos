@@ -17,7 +17,6 @@ export async function planStrategicRoute(apiKey, heightmapData, startPos, target
         return { waypoints: generateFallbackRoute(startPos, targetPos), quote: "Offline: No API key found." };
     }
 
-    // Determine correct Gen 3 model mapping
     const activeModel = (aiModel === 'gemini-3-pro' || aiModel === 'gemini-1.5-pro')
         ? "gemini-3-pro-preview"
         : "gemini-3-flash-preview";
@@ -26,9 +25,12 @@ export async function planStrategicRoute(apiKey, heightmapData, startPos, target
 
     try {
         const imageBase64 = heightmapToImage(heightmapData);
-        const textPrompt = `You are a legendary Lunar Scout AI Strategist. 
+        // Added dynamic seed (timestamp) and variety instruction to force unique quotes
+        const timestamp = Date.now();
+        const textPrompt = `You are a legendary Lunar Scout AI Strategist. [Request ID: ${timestamp}]
 Plan a tactical route for the rover. 
-Provide an inspirational quote from a famous person (with name).
+Provide a UNIQUE inspirational quote from a famous person (different every time). 
+Surprise the user with deep wisdom from explorers, scientists, or philosophers.
 
 COORD DATA:
 START: [${startPos[0].toFixed(1)}, ${startPos[2].toFixed(1)}]
@@ -37,9 +39,11 @@ TERRAIN SIZE: ${terrainSize}m
 
 JSON ONLY: {"waypoints": [[x1,z1], ...], "quote": "..."}`;
 
-        // Per user requirements: Initialization via object { apiKey: ... }
         const genAI = new GoogleGenAI({ apiKey: actualKey });
-        const model = genAI.getGenerativeModel({ model: activeModel });
+        const model = genAI.getGenerativeModel({
+            model: activeModel,
+            generationConfig: { temperature: 0.9 } // Added higher temperature for more variety
+        });
 
         const result = await model.generateContent([
             textPrompt,
@@ -48,11 +52,11 @@ JSON ONLY: {"waypoints": [[x1,z1], ...], "quote": "..."}`;
 
         const response = await result.response;
         const text = response.text();
+        console.log("AI Raw Response:", text); // Added logging for debugging
         return parseResponse(text, startPos, targetPos);
 
     } catch (err) {
         console.error('AI Navigator SDK Error:', err);
-        // Fallback to raw fetch if SDK fails Environment Check
         try {
             return await planStrategicRouteFetch(actualKey, heightmapData, startPos, targetPos, terrainSize, activeModel);
         } catch (fetchErr) {
@@ -61,17 +65,18 @@ JSON ONLY: {"waypoints": [[x1,z1], ...], "quote": "..."}`;
     }
 }
 
-// Fallback Raw Fetch implementation (v1beta)
 async function planStrategicRouteFetch(key, heightmapData, startPos, targetPos, terrainSize, modelId) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
     const imageBase64 = heightmapToImage(heightmapData);
+    const timestamp = Date.now();
     const payload = {
         contents: [{
             parts: [
-                { text: "Plan route. JSON ONLY." },
+                { text: `Plan route. Request ID: ${timestamp}. JSON ONLY: {"waypoints":..., "quote": "UNIQUE inspirational quote"}` },
                 { inline_data: { mime_type: "image/png", data: imageBase64 } }
             ]
-        }]
+        }],
+        generationConfig: { temperature: 0.9 }
     };
     const response = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
     if (!response.ok) throw new Error(`Fetch Error: ${response.status}`);
@@ -84,14 +89,17 @@ function parseResponse(text, startPos, targetPos) {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         try {
-            const parsed = JSON.parse(jsonMatch[0].replace(/```json|```/g, ''));
+            const cleanJson = jsonMatch[0].replace(/```json|```/g, '').trim();
+            const parsed = JSON.parse(cleanJson);
             return {
                 waypoints: parsed.waypoints || generateFallbackRoute(startPos, targetPos),
-                quote: parsed.quote || "Precision is the key to exploration."
+                quote: parsed.quote || "Exploration is in our nature. It is the only way to know our place in the universe."
             };
-        } catch (e) { }
+        } catch (e) {
+            console.error("JSON Parse Error in AI Response:", e, text);
+        }
     }
-    return { waypoints: generateFallbackRoute(startPos, targetPos), quote: "Strategy fallback active." };
+    return { waypoints: generateFallbackRoute(startPos, targetPos), quote: "Strategy calculated. Proceed with caution." };
 }
 
 // ============================================================
@@ -104,14 +112,14 @@ export async function getAutopilotCommand(apiKey, state, aiModel = 'gemini-3-fla
     else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
 
     const activeModel = (aiModel === 'gemini-3-pro' || aiModel === 'gemini-1.5-pro') ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
-    const { position, currentWaypoint, distToWaypoint, sCVaR, SMaR } = state;
+    const { position, currentWaypoint, distToWaypoint } = state;
 
     if (distToWaypoint < 5) return { steer: 0, throttle: 0.3, advanceWaypoint: true };
     if (!actualKey || actualKey === "undefined") return getHeuristicCommand(state);
 
     try {
         const genAI = new GoogleGenAI({ apiKey: actualKey });
-        const model = genAI.getGenerativeModel({ model: activeModel });
+        const model = genAI.getGenerativeModel({ model: activeModel, generationConfig: { temperature: 0.4 } });
         const textPrompt = `Rover autopilot. JSON {"steer": X, "throttle": Y}. STATE: Pos[${position[0].toFixed(1)}, ${position[2].toFixed(1)}], Target[${currentWaypoint[0].toFixed(1)}, ${currentWaypoint[1].toFixed(1)}]`;
         const result = await model.generateContent(textPrompt);
         return parseAutopilotResponse(result.response.text());

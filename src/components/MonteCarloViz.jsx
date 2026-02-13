@@ -47,17 +47,16 @@ function StrategicRoad({ waypoints, terrainData }) {
         const leftArr = [];
         const rightArr = [];
 
-        const target = waypoints[waypoints.length - 1];
-        const prev = waypoints[waypoints.length - 2];
-        const dir = new THREE.Vector3(target[0] - prev[0], 0, target[1] - prev[1]).normalize();
+        const targetPoint = waypoints[waypoints.length - 1];
+        const prevPoint = waypoints[waypoints.length - 2];
+        const dir = new THREE.Vector3(targetPoint[0] - prevPoint[0], 0, targetPoint[1] - prevPoint[1]).normalize();
 
-        // SHARPER ARROW GEOMETRY (Classic Aggressive Shape)
+        // SHARPER ARROW GEOMETRY
         const arrowLength = 15;
         const arrowWidth = 12.0;
-        const indentLength = 4.0;  // Deep indented back
+        const indentLength = 4.0;
 
-        // TIP is exactly at the target
-        const tip = new THREE.Vector3(target[0], 0, target[1]);
+        const tip = new THREE.Vector3(targetPoint[0], 0, targetPoint[1]);
         const yBase = getTerrainHeight(terrainData.heightData, tip.x, tip.z, terrainData.size) + 3.0;
         tip.y = yBase;
 
@@ -82,15 +81,14 @@ function StrategicRoad({ waypoints, terrainData }) {
                 const t = s / segs;
                 const x = start[0] + (end[0] - start[0]) * t;
                 const z = start[1] + (end[1] - start[1]) * t;
-                const dToIndent = Math.sqrt((x - indentC.x) ** 2 + (z - indentC.z) ** 2);
+                const distToIndent = Math.sqrt((x - indentC.x) ** 2 + (z - indentC.z) ** 2);
 
-                // Stop road mesh exactly at the arrow indent point
-                if (isLast && dToIndent < 1.0) break;
+                if (isLast && distToIndent < 0.5) break;
 
                 const y = getTerrainHeight(terrainData.heightData, x, z, terrainData.size) + 3.05;
-                const nX = start[0] + (end[0] - start[0]) * (t + 0.01);
-                const nZ = start[1] + (end[1] - start[1]) * (t + 0.01);
-                const fwd = new THREE.Vector2(nX - x, nZ - z).normalize();
+                const nextX = start[0] + (end[0] - start[0]) * (t + 0.01);
+                const nextZ = start[1] + (end[1] - start[1]) * (t + 0.01);
+                const fwd = new THREE.Vector2(nextX - x, nextZ - z).normalize();
                 const rgt = new THREE.Vector2(-fwd.y, fwd.x);
 
                 const pL = new THREE.Vector3(x + rgt.x * (roadWidth / 2), y, z + rgt.y * (roadWidth / 2));
@@ -108,40 +106,34 @@ function StrategicRoad({ waypoints, terrainData }) {
             }
         }
 
-        // 2. Bridge Road to Arrow
+        // 2. Head Geometry and Bridging
         const roadEndIdxL = (vIdx - 1) * 2;
         const roadEndIdxR = (vIdx - 1) * 2 + 1;
         const headIdx = vertices.length / 3;
 
-        // headIdx+0:baseL, headIdx+1:baseR, headIdx+2:tip, headIdx+3:indentC
         vertices.push(baseL.x, baseL.y, baseL.z, baseR.x, baseR.y, baseR.z, tip.x, tip.y, tip.z, indentC.x, indentC.y, indentC.z);
 
         const bL = headIdx, bR = headIdx + 1, tP = headIdx + 2, iC = headIdx + 3;
 
-        // Bridges: (roadEndL, roadEndR, iC) and (roadEndL, iC, bL) ...
         indices.push(roadEndIdxL, roadEndIdxR, iC);
         indices.push(roadEndIdxL, iC, bL);
         indices.push(roadEndIdxR, bR, iC);
 
-        // Arrow Wings (Solid Fill)
         indices.push(bL, tP, iC);
         indices.push(bR, iC, tP);
 
-        // CRITICAL FIX: perimeter MUST use Vector3 objects, not indices!
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geom.setIndex(indices);
+        geom.computeVertexNormals();
+
+        // FIXED: Using Vector3 objects for perimeter, NOT indices
         return {
-            ribbonGeom: geomFromBuffers(vertices, indices),
+            ribbonGeom: geom,
             perimeter: [...leftArr, baseL, tip, baseR, ...rightArr.reverse()],
             tipPos: tip
         };
     }, [waypoints, terrainData]);
-
-    function geomFromBuffers(v, i) {
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-        g.setIndex(i);
-        g.computeVertexNormals();
-        return g;
-    }
 
     return (
         <group>
