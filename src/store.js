@@ -19,23 +19,24 @@ export const COLORS = {
     BG_PANEL: 'rgba(0, 0, 0, 0.6)',
 };
 
-// AI mode constants
-export const AI_MODES = {
-    OFF: 'off',
-    ASSIST: 'assist',
+// AI/Drive modes
+export const DRIVE_MODES = {
+    MANUAL: 'manual',
     AUTOPILOT: 'autopilot',
 };
 
-// ======== INITIAL STATE ========
-const initialState = {
+// ======== INITIAL STATE GENERATOR ========
+// Returns a fresh state object with a new random terrain seed
+export const getInitialState = () => ({
     language: 'EN',
-    aiMode: AI_MODES.OFF, // 'off' | 'assist' | 'autopilot'
+    driveMode: DRIVE_MODES.MANUAL,
+    navigationOverlay: false, // Independent toggle
     speed: 0,
     pitch: 0,
     roll: 0,
     battery: 100,
     targetDistance: 0,
-    gameState: 'playing', // 'playing' | 'gameover' | 'success'
+    simulationState: 'running', // 'running' | 'gameover' | 'success'
     failReason: '',
     safetyScore: 100,
     elapsedTime: 0,
@@ -47,21 +48,23 @@ const initialState = {
     brightness: 1.2, // Exposure regulator
     shadowContrast: 0.5, // Shadow darkness regulator
     chromaticAberration: false, // OFF by default
-};
+    apiKey: localStorage.getItem('pathfinder_api_key') || '', // Gemini API key
+});
 
 // ======== REDUCER ========
-function gameReducer(state, action) {
+function simulationReducer(state, action) {
     switch (action.type) {
         case 'SET_LANGUAGE':
             return { ...state, language: action.payload };
-        case 'TOGGLE_AI': {
-            // Cycle: off → assist → autopilot → off
-            const modes = [AI_MODES.OFF, AI_MODES.ASSIST, AI_MODES.AUTOPILOT];
-            const idx = modes.indexOf(state.aiMode);
-            return { ...state, aiMode: modes[(idx + 1) % 3] };
-        }
-        case 'SET_AI_MODE':
-            return { ...state, aiMode: action.payload };
+        case 'TOGGLE_AUTOPILOT':
+            return {
+                ...state,
+                driveMode: state.driveMode === DRIVE_MODES.MANUAL ? DRIVE_MODES.AUTOPILOT : DRIVE_MODES.MANUAL,
+            };
+        case 'SET_DRIVE_MODE':
+            return { ...state, driveMode: action.payload };
+        case 'TOGGLE_NAV_OVERLAY':
+            return { ...state, navigationOverlay: !state.navigationOverlay };
         case 'SET_BRIGHTNESS':
             return { ...state, brightness: action.payload };
         case 'SET_SHADOW_CONTRAST':
@@ -70,39 +73,45 @@ function gameReducer(state, action) {
             return { ...state, chromaticAberration: !state.chromaticAberration };
         case 'UPDATE_TELEMETRY':
             return { ...state, ...action.payload };
-        case 'SET_GAME_STATE':
-            return { ...state, gameState: action.payload.state, failReason: action.payload.reason || '' };
-        case 'RESET_GAME':
+        case 'SET_SIMULATION_STATE':
+            return { ...state, simulationState: action.payload.state, failReason: action.payload.reason || '' };
+        case 'RESET_SIMULATION':
             return {
-                ...initialState,
+                ...getInitialState(),
                 language: state.language,
+                apiKey: state.apiKey,
+                // Override with new random seed just in case getInitialState logic changes
                 terrainSeed: Math.random() * 10000,
             };
         case 'NEW_TERRAIN':
             return {
-                ...initialState,
+                ...getInitialState(),
                 language: state.language,
+                apiKey: state.apiKey,
                 terrainSeed: Math.random() * 10000,
             };
         case 'SET_MONTE_CARLO':
             return { ...state, monteCarloResults: action.payload };
         case 'SET_INPUT':
             return { ...state, inputState: { ...state.inputState, ...action.payload } };
+        case 'SET_API_KEY':
+            localStorage.setItem('pathfinder_api_key', action.payload);
+            return { ...state, apiKey: action.payload };
         default:
             return state;
     }
 }
 
 // ======== CONTEXT ========
-export const GameContext = createContext(null);
-export const GameDispatchContext = createContext(null);
+export const SimulationContext = createContext(null);
+export const SimulationDispatchContext = createContext(null);
 
-export function useGameState() {
-    return useContext(GameContext);
+export function useSimulationState() {
+    return useContext(SimulationContext);
 }
 
-export function useGameDispatch() {
-    return useContext(GameDispatchContext);
+export function useSimulationDispatch() {
+    return useContext(SimulationDispatchContext);
 }
 
-export { initialState, gameReducer };
+export { simulationReducer };

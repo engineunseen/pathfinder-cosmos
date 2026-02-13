@@ -96,7 +96,7 @@ export function Stars({ count = 3000 }) {
             const phi = Math.acos(2 * Math.random() - 1);
 
             pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            pos[i * 3 + 1] = Math.abs(r * Math.cos(phi)); // Mostly above horizon
+            pos[i * 3 + 1] = r * Math.cos(phi); // Full sphere (omnipresent)
             pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
 
             // Varied brightness and slight color tints

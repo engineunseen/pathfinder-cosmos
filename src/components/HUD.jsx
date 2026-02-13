@@ -135,38 +135,47 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
 }
 
 // Bottom Control Panel
-function ControlPanel({ aiMode, lang, onSetAIMode, gameState }) {
+function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, navigationOverlay, onToggleNav }) {
     const t = STRINGS[lang];
+
+    const isDual = driveMode === 'autopilot' && navigationOverlay;
 
     return (
         <CornerBrackets className="panel-controls">
-            {gameState === 'playing' && (
+            {simulationState === 'running' && (
                 <>
                     <div className="ai-status">
-                        {aiMode === 'autopilot' ? (
-                            <span className="ai-active-text pulse">{t.autopilotActive}</span>
-                        ) : aiMode === 'assist' ? (
-                            <span className="ai-active-text pulse">{t.computingTrajectories}</span>
+                        {isDual ? (
+                            <span className="ai-active-text pulse" style={{ color: '#00FFFF' }}>{t.dualActive}</span>
+                        ) : driveMode === 'autopilot' ? (
+                            <span className="ai-active-text pulse" style={{ color: '#FF8C00' }}>{t.autopilotActive}</span>
+                        ) : navigationOverlay ? (
+                            <span className="ai-active-text pulse" style={{ color: '#00FFFF' }}>{t.navAssist}</span>
                         ) : (
                             <span className="ai-prompt">{t.navigatePrompt}</span>
                         )}
                     </div>
                     <div className="mode-selector">
-                        {[
-                            { key: 'off', label: t.manualPilot },
-                            { key: 'assist', label: t.monteCarloAssist },
-                            { key: 'autopilot', label: t.autopilot },
-                        ].map(m => (
-                            <button
-                                key={m.key}
-                                className={`mode-btn ${aiMode === m.key ? 'active' : ''}`}
-                                onClick={() => onSetAIMode(m.key)}
-                            >
-                                {m.label}
-                            </button>
-                        ))}
+                        <button
+                            className={`mode-btn ${driveMode === 'autopilot' ? 'active-autopilot' : ''}`}
+                            onClick={() => onSetDriveMode(driveMode === 'autopilot' ? 'manual' : 'autopilot')}
+                            style={{ flex: 2, minWidth: '160px' }}
+                        >
+                            <div className="inner-frame" />
+                            <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>{t.driveMode}</span>
+                            {driveMode === 'autopilot' ? t.autopilot : t.manual}
+                        </button>
+
+                        <button
+                            className={`mode-btn ${navigationOverlay ? 'active-overlay' : ''}`}
+                            onClick={onToggleNav}
+                            style={{ flex: 1, minWidth: '130px' }}
+                        >
+                            <div className="inner-frame" />
+                            <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>OVERLAY</span>
+                            {t.sensorData}
+                        </button>
                     </div>
-                    {/* Controls Hint integrated into panel */}
                     <div style={{ marginTop: '15px', borderTop: '1px solid rgba(0, 255, 255, 0.2)', paddingTop: '10px' }}>
                         <ControlsHint lang={lang} />
                     </div>
@@ -176,8 +185,8 @@ function ControlPanel({ aiMode, lang, onSetAIMode, gameState }) {
     );
 }
 
-// Game Over overlay
-function GameOverOverlay({ reason, lang, onRestart, safetyScore, elapsedTime }) {
+// Simulation Outcome overlay
+function OutcomeOverlay({ reason, lang, onRestart, safetyScore, elapsedTime }) {
     const t = STRINGS[lang];
     const isSuccess = reason === 'success';
 
@@ -185,13 +194,13 @@ function GameOverOverlay({ reason, lang, onRestart, safetyScore, elapsedTime }) 
         <div className="game-over-overlay">
             <CornerBrackets className="game-over-panel">
                 <h1 className={`game-over-title ${isSuccess ? 'success' : 'failure'}`}>
-                    {isSuccess ? t.success : t.gameOver}
+                    {isSuccess ? 'MISSION SUCCESS' : 'MISSION TERMINATED'}
                 </h1>
                 {!isSuccess && (
                     <p className="fail-reason">
-                        {reason === 'rollover' && t.criticalFailure}
-                        {reason === 'stuck' && t.stuck}
-                        {reason === 'damage' && t.damage}
+                        {reason === 'rollover' && 'CRITICAL ROLLOVER DETECTED'}
+                        {reason === 'stuck' && 'ROVER IMMOBILIZED'}
+                        {reason === 'damage' && 'POWER SOURCE EXHAUSTED'}
                     </p>
                 )}
                 <div className="score-row">
@@ -213,7 +222,12 @@ function GameOverOverlay({ reason, lang, onRestart, safetyScore, elapsedTime }) 
 }
 
 // Settings Modal component
-function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle }) {
+function SettingsModal({
+    isOpen, onClose, lang, onLanguageChange,
+    brightness, onBrightnessChange, shadowContrast, onShadowChange,
+    chromaticAberration, onChromaticToggle,
+    apiKey, onApiKeyChange
+}) {
     if (!isOpen) return null;
     const t = STRINGS[lang];
 
@@ -299,6 +313,30 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
                     >
                         {chromaticAberration ? 'ON' : 'OFF'}
                     </button>
+
+                </div>
+
+                <div style={{ marginTop: '15px', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid rgba(0, 255, 255, 0.2)' }}>
+                    <div className="settings-row" style={{ display: 'block' }}>
+                        <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>GEMINI API KEY:</span>
+                        <input
+                            type="password"
+                            value={apiKey || ''}
+                            onChange={(e) => onApiKeyChange(e.target.value)}
+                            placeholder="Enter Key..."
+                            style={{
+                                width: '100%',
+                                background: 'rgba(0, 0, 0, 0.4)',
+                                border: '1px solid #00FFFF',
+                                color: '#00FFFF',
+                                padding: '8px',
+                                fontFamily: 'monospace',
+                                fontSize: '12px',
+                                outline: 'none'
+                            }}
+                            onPointerDownCapture={(e) => { e.stopPropagation(); }}
+                        />
+                    </div>
                 </div>
 
                 <div style={{ marginTop: '10px', marginBottom: '20px' }}>
@@ -327,8 +365,8 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
                     {t.close}
                     <span className="btn-bracket">]</span>
                 </button>
-            </CornerBrackets>
-        </div>
+            </CornerBrackets >
+        </div >
     );
 }
 
@@ -393,8 +431,6 @@ function MobileControls({ onInputChange }) {
     }, [onInputChange]);
 
     const handleTouchEnd = useCallback(() => {
-        isActive.current = false;
-        onInputChange({ forward: 0, backward: 0, left: 0, right: 0 });
         if (knobRef.current) {
             knobRef.current.style.transform = 'translate(0, 0)';
         }
@@ -435,26 +471,31 @@ function MobileControls({ onInputChange }) {
 export default function HUD({
     telemetry,
     targetDistance,
-    aiMode,
-    gameState,
+    driveMode,
+    simulationState,
     failReason,
     safetyScore,
     elapsedTime,
     language,
     isMobile,
-    onToggleAI,
-    onSetAIMode,
+    onSetDriveMode,
     onNewTerrain,
     onRestart,
     onLanguageChange,
     onMobileInput,
-    brightness, // New prop
-    onBrightnessChange, // New prop
+    brightness,
+    onBrightnessChange,
     shadowContrast,
     onShadowChange,
     chromaticAberration,
     onChromaticToggle,
-    riskMetrics // New prop
+    riskMetrics,
+    apiKey,
+    onApiKeyChange,
+    isAiOnline,
+    aiQuote,
+    navigationOverlay,
+    onToggleNav
 }) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -479,21 +520,82 @@ export default function HUD({
 
             {/* Bottom Center: Controls */}
             <ControlPanel
-                aiMode={aiMode}
+                driveMode={driveMode}
                 lang={language}
-                onSetAIMode={onSetAIMode}
-                gameState={gameState}
+                onSetDriveMode={onSetDriveMode}
+                simulationState={simulationState}
+                navigationOverlay={navigationOverlay}
+                onToggleNav={onToggleNav}
             />
 
+            {/* AI Status / Missing Key Alert */}
+            {!isAiOnline && driveMode === 'autopilot' && (
+                <div style={{
+                    position: 'absolute',
+                    top: '80px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(255, 0, 0, 0.3)',
+                    padding: '10px 20px',
+                    borderRadius: '5px',
+                    border: '1px solid #ff0000',
+                    color: '#fff',
+                    zIndex: 1000,
+                    pointerEvents: 'none',
+                    backdropFilter: 'blur(5px)',
+                    fontFamily: 'monospace',
+                    fontSize: '14px'
+                }}>
+                    <span style={{ fontWeight: 'bold' }}>⚠️ STRATEGIC OFFLINE:</span> AI KEY MISSING. USING HEURISTIC FALLBACK.
+                </div>
+            )}
+
             {/* AI Mode indicator */}
-            {aiMode !== 'off' && gameState === 'playing' && (
+            {(driveMode !== 'manual' || navigationOverlay) && simulationState === 'running' && (
                 <div className="ai-indicator">
-                    <div className="ai-status-row">
-                        <div className="ai-dot pulse-dot" />
-                        <span className="ai-title">{aiMode === 'autopilot' ? STRINGS[language].autopilotActive : STRINGS[language].aiActive}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                            width: '10px',
+                            height: '10px',
+                            borderRadius: '50%',
+                            background: isAiOnline ? '#00FFFF' : '#FFBF00',
+                            boxShadow: `0 0 10px ${isAiOnline ? '#00FFFF' : '#FFBF00'}`
+                        }}></span>
+                        <span style={{ color: '#00FFFF', fontWeight: 'bold', fontSize: '14px' }}>
+                            {isAiOnline ? '[GEMINI 3 PRO]' : '[HEURISTIC ENGINE]'}
+                        </span>
+                        <span style={{ color: '#aaa', fontSize: '12px' }}>
+                            {driveMode === 'autopilot' ? 'FULL AUTOPILOT' : 'ADVISORY MODE'}
+                        </span>
                     </div>
-                    <div className="ai-calculating">
-                        <span className="blink-text">CALCULATING TRAJECTORIES...</span>
+                    <div style={{ marginTop: '5px', fontSize: '11px', color: isAiOnline ? '#FF00FF' : '#888' }}>
+                        {isAiOnline ? '✦ STRATEGIC INTELLIGENT ROUTE ACTIVE' : '⚠ DIRECT FALLBACK ROUTE ACTIVE'}
+                    </div>
+                </div>
+            )}
+
+            {/* AI Quote Verification Window (v3) */}
+            {aiQuote && simulationState === 'running' && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: '220px',
+                    left: '20px',
+                    width: '300px',
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    border: '1px solid #00FFFF',
+                    padding: '10px',
+                    color: '#00FFFF',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    boxShadow: '0 0 15px rgba(0, 255, 255, 0.2)',
+                    backdropFilter: 'blur(5px)',
+                    zIndex: 100
+                }}>
+                    <div style={{ borderBottom: '1px solid rgba(0, 255, 255, 0.3)', marginBottom: '8px', paddingBottom: '4px', fontSize: '10px', opacity: 0.7 }}>
+                        [AI CONNECTION VERIFIED] - STRATEGIC QUOTE:
+                    </div>
+                    <div style={{ fontStyle: 'italic', lineHeight: '1.4' }}>
+                        "{aiQuote}"
                     </div>
                 </div>
             )}
@@ -501,16 +603,14 @@ export default function HUD({
             {/* Controls hint moved into ControlPanel */}
 
             {/* Mobile controls */}
-            {isMobile && gameState === 'playing' && (
+            {isMobile && simulationState === 'running' && (
                 <MobileControls onInputChange={onMobileInput} />
             )}
 
-
-
-            {/* Game over overlay */}
-            {(gameState === 'gameover' || gameState === 'success') && (
-                <GameOverOverlay
-                    reason={gameState === 'success' ? 'success' : failReason}
+            {/* Simulation outcome overlay */}
+            {(simulationState === 'gameover' || simulationState === 'success') && (
+                <OutcomeOverlay
+                    reason={simulationState === 'success' ? 'success' : failReason}
                     lang={language}
                     onRestart={onRestart}
                     safetyScore={safetyScore}
@@ -530,6 +630,9 @@ export default function HUD({
                 onShadowChange={onShadowChange}
                 chromaticAberration={chromaticAberration}
                 onChromaticToggle={onChromaticToggle}
+
+                apiKey={apiKey}
+                onApiKeyChange={onApiKeyChange}
             />
 
             {/* Version Display */}
@@ -543,7 +646,7 @@ export default function HUD({
                 fontFamily: 'monospace',
                 pointerEvents: 'none'
             }}>
-                v0.6.1-alpha
+                v0.7.0-alpha
             </div>
         </div>
     );

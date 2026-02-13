@@ -111,14 +111,9 @@ function runSimulation(state, isAutopilot) {
         let simSteer, simThrottle;
 
         if (isAutopilot) {
-            // EXPLORATION: Try completely random steering and forward/backward throttle
-            simSteer = (rng() - 0.5) * 2.5; // Wider exploration
-            if (rng() < 0.2) { // 20% chance to try reverse gear
-                simThrottle = -0.5 - rng() * 0.5; // [-0.5, -1.0]
-                // When reversing, steering effect is inverted, but physics handles that via velocity
-            } else {
-                simThrottle = 0.3 + rng() * 0.7; // bias toward forward [0.3, 1.0]
-            }
+            // EXPLORATION: Wide forward-only fan for autopilot visualization
+            simSteer = (rng() - 0.5) * 2.5; // Wide steering exploration
+            simThrottle = 0.3 + rng() * 0.7; // Forward only [0.3, 1.0]
         } else {
             // PREDICTION: Noise around current user input
             const steerVariation = (rng() - 0.5) * 2.5; // Wider fan (±1.25 rad spread ~ ±70 deg)

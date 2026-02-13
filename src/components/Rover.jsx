@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { useBox } from '@react-three/cannon';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import { useGameDispatch, ROLLOVER_ANGLE } from '../store';
+import { useSimulationDispatch, ROLLOVER_ANGLE } from '../store';
 import { getHeightAtPosition } from '../terrain';
 
 // Rover specs
@@ -62,7 +62,7 @@ function ChamferBox({ args, bevel = 0.05, color, metalness, roughness, ...props 
 }
 
 const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 0], terrainData }, ref) => {
-    const dispatch = useGameDispatch();
+    const dispatch = useSimulationDispatch();
 
     // Internal state refs
     const position = useRef([0, 0, 0]);
@@ -73,7 +73,7 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
     // Input processing
     const steerAngle = useRef(0);
     const throttleRef = useRef(0);
-    const isGameover = useRef(false);
+    const isSimulationOver = useRef(false);
 
     // Wheel meshes
     const wheelRefs = useRef([]);
@@ -88,11 +88,11 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
         material: { friction: 0.1, restitution: 0.05 }, // Tiny bounce on impacts
         allowSleep: false,
         onCollide: (e) => {
-            if (e.contact.impactVelocity > 10 && !isGameover.current) {
+            if (e.contact.impactVelocity > 10 && !isSimulationOver.current) {
                 // Only trigger damage on hard impacts, not normal driving
                 if (Math.abs(e.contact.contactNormal[1]) < 0.5) { // side impact
-                    isGameover.current = true;
-                    dispatch({ type: 'SET_GAME_STATE', payload: { state: 'gameover', reason: 'damage' } });
+                    isSimulationOver.current = true;
+                    dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'gameover', reason: 'damage' } });
                 }
             }
         }
@@ -117,7 +117,7 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
             throttle: throttleRef.current,
         }),
         reset: (pos) => {
-            isGameover.current = false;
+            isSimulationOver.current = false;
             api.position.set(...(pos || startPosition));
             api.velocity.set(0, 0, 0);
             api.angularVelocity.set(0, 0, 0);
@@ -127,7 +127,7 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
 
     // Physics Loop
     useFrame((state, delta) => {
-        if (isGameover.current || !terrainData) return;
+        if (isSimulationOver.current || !terrainData) return;
 
         const input = getInput();
         const { forward, backward, left, right, brake } = input;
@@ -268,9 +268,9 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
         const pitch = Math.abs(euler.x * 180 / Math.PI);
         const roll = Math.abs(euler.z * 180 / Math.PI);
 
-        if ((pitch > ROLLOVER_ANGLE || roll > ROLLOVER_ANGLE) && !isGameover.current) {
-            isGameover.current = true;
-            dispatch({ type: 'SET_GAME_STATE', payload: { state: 'gameover', reason: 'rollover' } });
+        if ((pitch > ROLLOVER_ANGLE || roll > ROLLOVER_ANGLE) && !isSimulationOver.current) {
+            isSimulationOver.current = true;
+            dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'gameover', reason: 'rollover' } });
         }
 
         // Telemetry

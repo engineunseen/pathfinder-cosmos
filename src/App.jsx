@@ -4,18 +4,19 @@
 import React, { useEffect, useRef, useState, useCallback, useReducer, useMemo } from 'react';
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
-import { Physics } from '@react-three/cannon';
+import { Physics, useBox } from '@react-three/cannon';
 import { Stars } from './components/Scene'; // Custom Stars with variable brightness
 import { EffectComposer, ChromaticAberration } from '@react-three/postprocessing';
 
 // Store & Constants
 import {
-  initialState,
-  gameReducer,
-  GameContext,
-  GameDispatchContext,
-  AI_MODES,
-  LUNAR_GRAVITY
+  getInitialState,
+  simulationReducer,
+  LUNAR_GRAVITY,
+  DRIVE_MODES,
+  COLORS,
+  SimulationContext,
+  SimulationDispatchContext,
 } from './store';
 
 // Components
@@ -29,21 +30,28 @@ import HUD from './components/HUD';
 import { LunarLighting, CameraController } from './components/Scene';
 import Dust from './components/Dust';
 
+// AI Navigation System
+import { planStrategicRoute, getAutopilotCommand, summarizeFan } from './aiNavigator';
+
 // Terrain Generation Utility
 import { generateTerrainData } from './terrain';
+
+
 
 function PhysicsScene({
   terrainData,
   getInput,
-  aiMode,
-  gameState,
+  driveMode,
+  navigationOverlay,
+  simulationState,
   dispatch,
   roverRef,
   onTelemetryUpdate,
   startPos,
   monteCarloTrajectories,
   dangerMap,
-  shadowContrast
+  shadowContrast,
+  waypoints // Added
 }) {
   return (
     <>
@@ -51,14 +59,14 @@ function PhysicsScene({
       <LunarTerrain terrainData={terrainData} />
       <Rocks rocks={terrainData.rocks} />
 
-      {gameState === 'playing' && (
+      {simulationState === 'running' && (
         <Rover
           ref={roverRef}
           getInput={getInput}
           terrainData={terrainData}
           onTelemetryUpdate={onTelemetryUpdate}
           startPosition={startPos}
-          aiMode={aiMode}
+          driveMode={driveMode}
         />
       )}
 
@@ -68,14 +76,16 @@ function PhysicsScene({
       <MonteCarloViz
         trajectories={monteCarloTrajectories}
         dangerMap={dangerMap}
-        active={aiMode !== AI_MODES.OFF && gameState === 'playing'}
+        active={navigationOverlay && simulationState === 'running'}
+        waypoints={waypoints}
+        terrainData={terrainData} // Passing terrain for draping
       />
     </>
   );
 }
 
-export default function App() {
-  const [state, dispatch] = useReducer(gameReducer, initialState);
+export default function SimulationApp() {
+  const [state, dispatch] = useReducer(simulationReducer, getInitialState());
   const [telemetry, setTelemetry] = useState({
     speed: '0.0',
     pitch: '0.0',
@@ -84,6 +94,7 @@ export default function App() {
     velocity: [0, 0, 0],
     rotation: [0, 0, 0]
   });
+
   const telemetryRef = useRef(telemetry);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -91,7 +102,31 @@ export default function App() {
   const batteryRef = useRef(100);
   const elapsedRef = useRef(0);
   const lastTimeRef = useRef(performance.now());
+
+  // Generate terrain based on seed
+  const terrainData = useMemo(() => {
+    return generateTerrainData(state.terrainSeed);
+  }, [state.terrainSeed]);
+
   const [isMobile, setIsMobile] = useState(false);
+  const [waypoints, setWaypoints] = useState([]); // THE STRATEGIC ROUTE
+  const [aiQuote, setAiQuote] = useState(""); // V3: Inspirational quote to verify connection
+  const [currentWaypointIdx, setCurrentWaypointIdx] = useState(0);
+
+  // Initial Strategic Planning (AI Strategist)
+  useEffect(() => {
+    async function planRoute() {
+      if (terrainData) {
+        const startPos = state.roverPosition;
+        const targetPos = [terrainData.beacon.x, terrainData.beacon.y, terrainData.beacon.z];
+        const result = await planStrategicRoute(state.apiKey, terrainData.heightData, startPos, targetPos, terrainData.size);
+        setWaypoints(result.waypoints);
+        setAiQuote(result.quote);
+        setCurrentWaypointIdx(0);
+      }
+    }
+    planRoute();
+  }, [state.apiKey, terrainData, state.terrainSeed]);
 
   // Monte Carlo state
   const [monteCarloTrajectories, setMonteCarloTrajectories] = useState(null);
@@ -99,24 +134,53 @@ export default function App() {
   const [dangerMap, setDangerMap] = useState(null);
   const mcWorkerRef = useRef(null);
 
+  // AI Navigation state
+  const aiCommandRef = useRef(null); // Latest AI command
+
   // Sync telemetry ref
   useEffect(() => {
     telemetryRef.current = telemetry;
   }, [telemetry]);
+
+
 
   // Check for mobile
   useEffect(() => {
     setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
   }, []);
 
-  // Generate terrain based on seed
-  const terrainData = useMemo(() => {
-    return generateTerrainData(state.terrainSeed);
-  }, [state.terrainSeed]);
+
 
   const startPos = useMemo(() => {
-    const h = terrainData.matrix[Math.floor(terrainData.segments / 2)][Math.floor(terrainData.segments / 2)];
-    return [0, h + 2, 0];
+    // SAFE SPAWN LOGIC: Find flattest area near center
+    // We sample a 7x7 grid to find the most stable landing pad
+    const centerIdx = Math.floor(terrainData.segments / 2);
+    let bestX = 0;
+    let bestZ = 0;
+    let minTilt = Infinity;
+    let bestY = 0;
+
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        const ix = centerIdx + dx;
+        const iz = centerIdx + dz;
+        const h = terrainData.matrix[iz][ix];
+
+        // Check surrounding heights to find local stability
+        const tiltX = Math.abs(terrainData.matrix[iz][ix + 1] - terrainData.matrix[iz][ix - 1]);
+        const tiltZ = Math.abs(terrainData.matrix[iz + 1][ix] - terrainData.matrix[iz - 1][ix]);
+        const totalTilt = tiltX + tiltZ;
+
+        if (totalTilt < minTilt) {
+          minTilt = totalTilt;
+          bestX = (ix / terrainData.segments - 0.5) * terrainData.size;
+          bestZ = (iz / terrainData.segments - 0.5) * terrainData.size;
+          bestY = h;
+        }
+      }
+    }
+
+    return [bestX, bestY + 0.8, bestZ]; // Low altitude drop to prevent physics bouncing
   }, [terrainData]);
 
   // Input Handling
@@ -135,7 +199,8 @@ export default function App() {
         case 'KeyA': inputRef.current.left = 1; break;
         case 'KeyD': inputRef.current.right = 1; break;
         case 'Space': inputRef.current.brake = true; break;
-        case 'KeyM': dispatch({ type: 'TOGGLE_AI' }); break;
+        case 'KeyM': dispatch({ type: 'TOGGLE_AUTOPILOT' }); break;
+        case 'KeyN': dispatch({ type: 'TOGGLE_NAV_OVERLAY' }); break;
         case 'KeyR': handleRestart(); break;
       }
     };
@@ -168,7 +233,7 @@ export default function App() {
       const dt = (t - lastTimeRef.current) / 1000;
       lastTimeRef.current = t;
 
-      if (state.gameState === 'playing' && !isCalculating) {
+      if (state.simulationState === 'running' && !isCalculating) {
         elapsedRef.current += dt;
         batteryRef.current = Math.max(0, batteryRef.current - dt * 0.05);
 
@@ -177,12 +242,12 @@ export default function App() {
         const dz = telemetry.position[2] - terrainData.beacon.z;
         const currentDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        if (currentDist < 3 && state.gameState === 'playing') {
-          dispatch({ type: 'SET_GAME_STATE', payload: { state: 'success' } });
+        if (currentDist < 3 && state.simulationState === 'running') {
+          dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'success' } });
         }
 
         if (batteryRef.current <= 0) {
-          dispatch({ type: 'SET_GAME_STATE', payload: { state: 'gameover', reason: 'damage' } });
+          dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'gameover', reason: 'damage' } });
         }
       }
 
@@ -190,75 +255,63 @@ export default function App() {
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, [state.gameState, terrainData.beacon, telemetry.position, isCalculating]);
+  }, [state.simulationState, terrainData.beacon, telemetry.position, isCalculating]);
 
-  // AI AUTOPILOT CONTROL LOGIC — follows the Monte Carlo fan
+  // AI AUTOPILOT CONTROL LOGIC — follows strategic route + Monte Carlo fan
   useEffect(() => {
-    if (state.aiMode === AI_MODES.AUTOPILOT && monteCarloTrajectories && state.gameState === 'playing') {
-      // Sort all trajectories by fitness (highest = greenest + closest to target)
+    if (state.driveMode === DRIVE_MODES.AUTOPILOT && monteCarloTrajectories && state.simulationState === 'running') {
+      // Guard: Ensure telemetry and waypoints exist
+      if (!telemetryRef.current || !telemetryRef.current.position) return;
+
+      // Sort all trajectories by fitness
       const sorted = [...monteCarloTrajectories].sort((a, b) => b.fitness - a.fitness);
       const best = sorted[0];
 
-      if (best && best.fitness > -5000) {
-        // Determine the best direction: forward or reverse
-        const bestIsForward = best.input.throttle >= 0;
+      if (!best) return; // Wait for data
 
-        // Filter top trajectories by the SAME direction as the best path
-        const sameDirection = sorted.filter(t =>
-          bestIsForward ? t.input.throttle >= 0 : t.input.throttle < 0
-        );
-        const topN = sameDirection.slice(0, Math.min(10, sameDirection.length));
+      // Get current waypoint from strategic route
+      const currentWP = (waypoints && waypoints.length > 0 && waypoints[currentWaypointIdx])
+        ? waypoints[currentWaypointIdx]
+        : [terrainData.beacon.x, terrainData.beacon.z]; // Fallback: aim at beacon directly
 
-        // Average steering from consensus group for stable direction
-        let avgSteer = 0;
-        let avgThrottle = 0;
-        for (const t of topN) {
-          avgSteer += t.input.steer;
-          avgThrottle += t.input.throttle;
-        }
-        avgSteer /= topN.length;
-        avgThrottle /= topN.length;
+      const dx = currentWP[0] - telemetryRef.current.position[0];
+      const dz = currentWP[1] - telemetryRef.current.position[2];
+      const distToWP = Math.sqrt(dx * dx + dz * dz);
 
-        const targetSteer = -avgSteer;
-        inputRef.current.left = targetSteer > 0 ? Math.min(targetSteer, 1) : 0;
-        inputRef.current.right = targetSteer < 0 ? Math.min(-targetSteer, 1) : 0;
-
-        // Modulate speed based on risk metrics (sCVaR & SMaR)
-        let speedFactor = 1.0;
-        if (riskMetrics.SMaR !== undefined && riskMetrics.SMaR < 25) {
-          speedFactor *= 0.5; // SMaR low = less margin = slow down
-        }
-        if (riskMetrics.sCVaR !== undefined && riskMetrics.sCVaR > 50) {
-          speedFactor *= 0.3; // sCVaR high = big consequences = slow down
-        }
-
-        const scaledThrottle = avgThrottle * speedFactor;
-
-        if (bestIsForward) {
-          inputRef.current.forward = Math.max(0.2, Math.min(scaledThrottle, 1));
-          inputRef.current.backward = 0;
-        } else {
-          // Reversing to escape — use moderate reverse speed
-          inputRef.current.forward = 0;
-          inputRef.current.backward = Math.min(Math.abs(scaledThrottle), 0.5);
-        }
-        inputRef.current.brake = false;
-      } else {
-        // Extremely rare: ALL 60 paths are catastrophic
-        // Slowly creep backward with slight random steering to escape
-        inputRef.current.forward = 0;
-        inputRef.current.backward = 0.3;
-        inputRef.current.left = Math.random() > 0.5 ? 0.5 : 0;
-        inputRef.current.right = Math.random() > 0.5 ? 0.5 : 0;
-        inputRef.current.brake = false;
+      // Advance to next waypoint if close enough
+      if (distToWP < 8 && waypoints && currentWaypointIdx < waypoints.length - 1) {
+        setCurrentWaypointIdx(prev => prev + 1);
       }
+
+      // Get AI command (heuristic fallback if no API key)
+      const aiState = {
+        position: telemetryRef.current.position,
+        velocity: telemetryRef.current.velocity,
+        rotation: telemetryRef.current.rotation,
+        currentWaypoint: currentWP,
+        nextWaypoint: waypoints && waypoints[currentWaypointIdx + 1] || currentWP,
+        fanSummary: summarizeFan(monteCarloTrajectories),
+        sCVaR: riskMetrics.sCVaR,
+        SMaR: riskMetrics.SMaR,
+        distToWaypoint: distToWP,
+      };
+
+      // Use heuristic immediately (AI API call is async, used for future)
+      const { steer, throttle } = getHeuristicFromFan(sorted, aiState);
+      inputRef.current.left = steer > 0 ? Math.min(steer, 1) : 0;
+      inputRef.current.right = steer < 0 ? Math.min(-steer, 1) : 0;
+      inputRef.current.forward = throttle > 0 ? throttle : 0;
+      inputRef.current.backward = throttle < 0 ? -throttle : 0;
+      inputRef.current.brake = false;
     }
-  }, [monteCarloTrajectories, state.aiMode, state.gameState, riskMetrics]);
+  }, [monteCarloTrajectories, state.driveMode, state.simulationState, riskMetrics, waypoints, currentWaypointIdx]);
+
+
 
   // Reset inputs when switching modes to prevent 'stuck' controls
   useEffect(() => {
     inputRef.current = { forward: 0, backward: 0, left: 0, right: 0, brake: false };
-  }, [state.aiMode]);
+  }, [state.driveMode]);
 
   // Initialize MC Worker
   useEffect(() => {
@@ -291,14 +344,19 @@ export default function App() {
 
   // Feed Worker
   useEffect(() => {
-    if (mcWorkerRef.current && state.aiMode !== AI_MODES.OFF && state.gameState === 'playing') {
+    const shouldRunWorker = state.driveMode === DRIVE_MODES.AUTOPILOT || state.navigationOverlay;
+
+    if (mcWorkerRef.current && shouldRunWorker && state.simulationState === 'running') {
       const interval = setInterval(() => {
+        // Guard: Wait for telemetry
+        if (!telemetryRef.current || !telemetryRef.current.position) return;
+
         setIsCalculating(true);
 
         mcWorkerRef.current.postMessage({
           type: 'RUN_SIMULATION',
           payload: {
-            isAutopilot: state.aiMode === AI_MODES.AUTOPILOT,
+            isAutopilot: state.driveMode === DRIVE_MODES.AUTOPILOT,
             roverState: {
               position: telemetryRef.current.position,
               velocity: telemetryRef.current.velocity,
@@ -311,15 +369,15 @@ export default function App() {
         });
       }, 700);
       return () => clearInterval(interval);
-    } else if (state.aiMode === AI_MODES.OFF) {
-      // Clear metrics when AI is off
+    } else if (!shouldRunWorker) {
+      // Clear metrics when nothing is active
       setRiskMetrics({ sCVaR: undefined, SMaR: undefined });
       setMonteCarloTrajectories(null);
     }
-  }, [state.aiMode, state.gameState, terrainData.beacon]);
+  }, [state.driveMode, state.navigationOverlay, state.simulationState, terrainData.beacon]);
 
   const handleRestart = useCallback(() => {
-    dispatch({ type: 'RESET_GAME' });
+    dispatch({ type: 'RESET_SIMULATION' });
     batteryRef.current = 100;
     elapsedRef.current = 0;
     setIsCalculating(false);
@@ -342,8 +400,8 @@ export default function App() {
   }, [telemetry.position, terrainData.beacon]);
 
   return (
-    <GameContext.Provider value={state}>
-      <GameDispatchContext.Provider value={dispatch}>
+    <SimulationContext.Provider value={state}>
+      <SimulationDispatchContext.Provider value={dispatch}>
         <div style={{ width: '100vw', height: '100vh', background: '#000000', position: 'relative', overflow: 'hidden' }}>
           <Canvas
             shadows
@@ -357,12 +415,12 @@ export default function App() {
           >
             <color attach="background" args={['#000000']} />
             <fog attach="fog" args={['#000000', 100, 450]} />
-            <Stars count={3000} />
+            <Stars count={6000} />
             <Dust />
 
             <CameraController
               targetPosition={telemetry.position}
-              enabled={state.gameState === 'playing'}
+              enabled={state.simulationState === 'running'}
             />
 
             <Physics
@@ -375,8 +433,9 @@ export default function App() {
               <PhysicsScene
                 terrainData={terrainData}
                 getInput={getInput}
-                aiMode={state.aiMode}
-                gameState={state.gameState}
+                driveMode={state.driveMode}
+                navigationOverlay={state.navigationOverlay}
+                simulationState={state.simulationState}
                 dispatch={dispatch}
                 roverRef={roverRef}
                 onTelemetryUpdate={handleTelemetry}
@@ -384,6 +443,7 @@ export default function App() {
                 monteCarloTrajectories={monteCarloTrajectories}
                 dangerMap={dangerMap}
                 shadowContrast={state.shadowContrast}
+                waypoints={waypoints}
               />
             </Physics>
             {state.chromaticAberration && (
@@ -400,18 +460,20 @@ export default function App() {
               roll: telemetry.roll,
               battery: batteryRef.current,
             }}
-            targetDistance={targetDistance}
-            aiMode={state.aiMode}
-            gameState={state.gameState}
+            targetDistance={state.targetDistance}
+            driveMode={state.driveMode}
+            aiQuote={aiQuote}
+            simulationState={state.simulationState}
             isCalculating={isCalculating}
             riskMetrics={riskMetrics}
+            apiKey={state.apiKey}
+            onApiKeyChange={(key) => dispatch({ type: 'SET_API_KEY', payload: key })}
             failReason={state.failReason}
             safetyScore={Math.max(0, Math.round(100 - elapsedRef.current * 0.1 - Math.abs(parseFloat(telemetry.pitch)) * 0.5))}
             elapsedTime={elapsedRef.current}
             language={state.language}
             isMobile={isMobile}
-            onToggleAI={() => dispatch({ type: 'TOGGLE_AI' })}
-            onSetAIMode={(mode) => dispatch({ type: 'SET_AI_MODE', payload: mode })}
+            onSetDriveMode={(mode) => dispatch({ type: 'SET_DRIVE_MODE', payload: mode })}
             onNewTerrain={handleNewTerrain}
             onRestart={handleRestart}
             onLanguageChange={(l) => dispatch({ type: 'SET_LANGUAGE', payload: l })}
@@ -422,12 +484,76 @@ export default function App() {
             chromaticAberration={state.chromaticAberration}
             onChromaticToggle={() => dispatch({ type: 'TOGGLE_CHROMATIC' })}
             onMobileInput={(inp) => {
-              if (inp.toggleAI) dispatch({ type: 'TOGGLE_AI' });
+              if (inp.toggleAutopilot) dispatch({ type: 'TOGGLE_AUTOPILOT' });
+              else if (inp.toggleNav) dispatch({ type: 'TOGGLE_NAV_OVERLAY' });
               else inputRef.current = { ...inputRef.current, ...inp };
             }}
+            isAiOnline={!!state.apiKey}
+            navigationOverlay={state.navigationOverlay}
+            onToggleNav={() => dispatch({ type: 'TOGGLE_NAV_OVERLAY' })}
           />
         </div>
-      </GameDispatchContext.Provider>
-    </GameContext.Provider>
+      </SimulationDispatchContext.Provider>
+    </SimulationContext.Provider>
   );
+}
+
+// ==========================================
+// LOCAL NAVIGATION HEURISTIC (Level 2 Fallback)
+// Follows strategic waypoints while avoiding red paths in the fan
+// ==========================================
+function getHeuristicFromFan(sortedTrajectories, aiState) {
+  const { currentWaypoint, position, rotation, sCVaR, SMaR } = aiState;
+
+  // 1. Calculate desired heading to waypoint
+  const dx = currentWaypoint[0] - position[0];
+  const dz = currentWaypoint[1] - position[2];
+  const desiredAngle = Math.atan2(dx, dz);
+  const currentAngle = rotation[1];
+
+  let angleDiff = desiredAngle - currentAngle;
+  // Normalize to [-PI, PI]
+  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+  // 2. Find best trajectory that is closest to desired heading AND safe
+  // sortedTrajectories are already sorted by fitness (greenest + closest to target)
+
+  // Simple approach: Take the best fitness path
+  // The fitness function in worker already penalizes distance to target, 
+  // so the best path is effectively the one that gets us closer to the waypoint safely.
+  const best = sortedTrajectories[0];
+
+  if (!best || best.fitness < -5000) {
+    // All paths critical: escape maneuver
+    return { steer: (Math.random() - 0.5) * 2, throttle: -0.3 };
+  }
+
+  // 3. Determine direction
+  const bestIsForward = best.input.throttle >= 0;
+
+  // 4. Consensus steering (smoothness)
+  const sameDirection = sortedTrajectories.filter(t =>
+    bestIsForward ? t.input.throttle >= 0 : t.input.throttle < 0
+  );
+  const topN = sameDirection.slice(0, Math.min(10, sameDirection.length));
+
+  let avgSteer = 0;
+  let avgThrottle = 0;
+  for (const t of topN) {
+    avgSteer += t.input.steer;
+    avgThrottle += t.input.throttle;
+  }
+  avgSteer /= topN.length;
+  avgThrottle /= topN.length;
+
+  // 5. Apply speed modulation based on metrics
+  let speedFactor = 1.0;
+  if (SMaR !== undefined && SMaR !== null && SMaR < 25) speedFactor *= 0.5;
+  if (sCVaR !== undefined && sCVaR !== null && sCVaR > 50) speedFactor *= 0.3;
+
+  return {
+    steer: topN.length > 0 ? -avgSteer : 0, // Invert for control
+    throttle: topN.length > 0 ? avgThrottle * speedFactor : 0
+  };
 }

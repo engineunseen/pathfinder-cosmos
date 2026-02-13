@@ -107,9 +107,8 @@ function Beacon({ position }) {
     useFrame((state) => {
         const t = state.clock.elapsedTime;
         if (beaconRef.current) {
-            beaconRef.current.position.y = position[1] + Math.sin(t * 2) * 0.5 + 1;
-        }
-        if (ringRef.current) {
+            beaconRef.current.position.y = position[1] + 15 + Math.sin(t * 2) * 0.5;
+        } if (ringRef.current) {
             ringRef.current.rotation.x = Math.sin(t) * 0.3;
             ringRef.current.rotation.z = Math.cos(t * 1.3) * 0.3;
             ringRef.current.scale.setScalar(1 + Math.sin(t * 3) * 0.1);
@@ -123,37 +122,37 @@ function Beacon({ position }) {
     return (
         <group position={position}>
             {/* Beacon light column */}
-            <mesh position={[0, 5, 0]}>
-                <cylinderGeometry args={[0.02, 0.3, 10, 8]} />
-                <meshBasicMaterial color="#00FFFF" transparent opacity={0.3} />
+            <mesh position={[0, 15, 0]}>
+                <cylinderGeometry args={[0.05, 0.4, 30, 8]} />
+                <meshStandardMaterial color="#00FFFF" transparent opacity={0.5} emissive="#00FFFF" emissiveIntensity={5} toneMapped={false} />
             </mesh>
 
             {/* Beacon core */}
-            <mesh ref={beaconRef} position={[0, position[1] + 1, 0]}>
-                <octahedronGeometry args={[0.6, 0]} />
-                <meshBasicMaterial color="#00FFFF" />
+            <mesh ref={beaconRef} position={[0, position[1] + 15, 0]}>
+                <octahedronGeometry args={[1.5, 0]} />
+                <meshStandardMaterial color="#00FFFF" emissive="#00FFFF" emissiveIntensity={10} toneMapped={false} />
             </mesh>
 
             {/* Orbiting ring */}
-            <mesh ref={ringRef} position={[0, position[1] + 1, 0]}>
-                <torusGeometry args={[1.2, 0.03, 8, 32]} />
-                <meshBasicMaterial color="#00FF41" transparent opacity={0.6} />
+            <mesh ref={ringRef} position={[0, position[1] + 15, 0]}>
+                <torusGeometry args={[1.5, 0.05, 8, 32]} />
+                <meshStandardMaterial color="#00FF41" transparent opacity={0.8} emissive="#00FF41" emissiveIntensity={5} toneMapped={false} />
             </mesh>
 
             {/* Second ring */}
-            <mesh ref={ring2Ref} position={[0, position[1] + 1, 0]}>
-                <torusGeometry args={[1.6, 0.02, 8, 32]} />
-                <meshBasicMaterial color="#00FFFF" transparent opacity={0.4} />
+            <mesh ref={ring2Ref} position={[0, position[1] + 15, 0]}>
+                <torusGeometry args={[2.0, 0.03, 8, 32]} />
+                <meshStandardMaterial color="#00FFFF" transparent opacity={0.7} emissive="#00FFFF" emissiveIntensity={5} toneMapped={false} />
             </mesh>
 
             {/* Ground circle indicator */}
-            <mesh position={[0, 0.15, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[2, 2.5, 32]} />
-                <meshBasicMaterial color="#00FF41" transparent opacity={0.4} side={THREE.DoubleSide} />
+            <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[2.5, 3.2, 32]} />
+                <meshStandardMaterial color="#00FF41" transparent opacity={0.6} emissive="#00FF41" emissiveIntensity={2} side={THREE.DoubleSide} toneMapped={false} />
             </mesh>
 
             {/* Point light */}
-            <pointLight position={[0, 3, 0]} color="#00FFFF" intensity={5} distance={30} />
+            <pointLight position={[0, 5, 0]} color="#00FFFF" intensity={15} distance={50} />
         </group>
     );
 }
