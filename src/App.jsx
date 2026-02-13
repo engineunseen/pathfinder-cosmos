@@ -460,7 +460,7 @@ export default function SimulationApp() {
               roll: telemetry.roll,
               battery: batteryRef.current,
             }}
-            targetDistance={state.targetDistance}
+            targetDistance={targetDistance}
             driveMode={state.driveMode}
             aiQuote={aiQuote}
             simulationState={state.simulationState}
