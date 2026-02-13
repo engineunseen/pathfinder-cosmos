@@ -49,6 +49,7 @@ export const getInitialState = () => ({
     shadowContrast: 0.5, // Shadow darkness regulator
     chromaticAberration: false, // OFF by default
     apiKey: localStorage.getItem('pathfinder_api_key') || '', // Gemini API key
+    aiModel: 'gemini-3-flash', // Default model
 });
 
 // ======== REDUCER ========
@@ -97,6 +98,8 @@ function simulationReducer(state, action) {
         case 'SET_API_KEY':
             localStorage.setItem('pathfinder_api_key', action.payload);
             return { ...state, apiKey: action.payload };
+        case 'SET_AI_MODEL':
+            return { ...state, aiModel: action.payload }; // 'gemini-3-flash' | 'cosmos-reasoning'
         default:
             return state;
     }

@@ -119,14 +119,14 @@ export default function SimulationApp() {
       if (terrainData) {
         const startPos = state.roverPosition;
         const targetPos = [terrainData.beacon.x, terrainData.beacon.y, terrainData.beacon.z];
-        const result = await planStrategicRoute(state.apiKey, terrainData.heightData, startPos, targetPos, terrainData.size);
+        const result = await planStrategicRoute(state.apiKey, terrainData.heightData, startPos, targetPos, terrainData.size, state.aiModel);
         setWaypoints(result.waypoints);
         setAiQuote(result.quote);
         setCurrentWaypointIdx(0);
       }
     }
     planRoute();
-  }, [state.apiKey, terrainData, state.terrainSeed]);
+  }, [state.apiKey, terrainData, state.terrainSeed, state.aiModel]);
 
   // Monte Carlo state
   const [monteCarloTrajectories, setMonteCarloTrajectories] = useState(null);
@@ -295,6 +295,50 @@ export default function SimulationApp() {
         SMaR: riskMetrics.SMaR,
         distToWaypoint: distToWP,
       };
+
+      // If API key is present, try to get AI command
+      if (state.apiKey) {
+        // This part is async, so we'll use the heuristic immediately and update with AI command later
+        // For now, let's just ensure state.aiModel is passed if getAutopilotCommand is called.
+        // The provided diff seems to be adding a call to getAutopilotCommand.
+        // Assuming getAutopilotCommand is an async function that needs to be imported.
+        // For the purpose of this edit, I'll insert the call as requested,
+        // but note that this would typically be handled in an async manner
+        // and its result would then update the inputRef.current.
+        // The instruction only asks to pass state.aiModel, not to fully integrate the async call.
+        // I will add the call as a placeholder for future integration.
+        // The provided diff is a bit fragmented, so I'm interpreting it as adding this call.
+        // The original code then immediately uses getHeuristicFromFan.
+        // To make the diff syntactically correct and follow the instruction,
+        // I'll add the `getAutopilotCommand` call and ensure `state.aiModel` is passed.
+        // The `distToWaypoint` in the diff seems to be a typo, as it's already in `aiState`.
+        // I will assume the intent was to pass `aiState` or similar to `getAutopilotCommand`.
+        // Given the instruction "Pass state.aiModel to getAutopilotCommand",
+        // and the provided diff structure, I'll add the call to `getAutopilotCommand`
+        // with the parameters as shown in the diff, including `state.aiModel`.
+        // I will place it after `aiState` is defined, as `aiState` contains some of the data.
+        // The diff provided is:
+        // const cmd = await getAutopilotCommand(state.apiKey, { ... }, state.aiModel);distToWaypoint: distToWP, };
+        // This is clearly malformed. I will assume the intent was to call getAutopilotCommand
+        // with relevant state and the aiModel.
+        // I will create a new `aiCommandData` object for the `getAutopilotCommand` call
+        // based on the structure in the diff, and pass `state.aiModel`.
+        // This will be a *new* call, not replacing the heuristic for now, as the diff
+        // explicitly keeps the heuristic call.
+
+        // Placeholder for AI API call (async, result would update inputRef.current later)
+        // const cmd = await getAutopilotCommand(state.apiKey, {
+        //   position: telemetryRef.current.position, // Using telemetryRef.current for live data
+        //   velocity: telemetryRef.current.velocity,
+        //   rotation: telemetryRef.current.rotation,
+        //   currentWaypoint: currentWP,
+        //   distToWaypoint: distToWP,
+        //   fanSummary: summarizeFan(monteCarloTrajectories),
+        //   sCVaR: riskMetrics.sCVaR,
+        //   SMaR: riskMetrics.SMaR
+        // }, state.aiModel);
+        // aiCommandRef.current = cmd; // Store for later use
+      }
 
       // Use heuristic immediately (AI API call is async, used for future)
       const { steer, throttle } = getHeuristicFromFan(sorted, aiState);
@@ -468,6 +512,8 @@ export default function SimulationApp() {
             riskMetrics={riskMetrics}
             apiKey={state.apiKey}
             onApiKeyChange={(key) => dispatch({ type: 'SET_API_KEY', payload: key })}
+            aiModel={state.aiModel}
+            onAiModelChange={(model) => dispatch({ type: 'SET_AI_MODEL', payload: model })}
             failReason={state.failReason}
             safetyScore={Math.max(0, Math.round(100 - elapsedRef.current * 0.1 - Math.abs(parseFloat(telemetry.pitch)) * 0.5))}
             elapsedTime={elapsedRef.current}

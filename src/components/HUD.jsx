@@ -226,7 +226,8 @@ function SettingsModal({
     isOpen, onClose, lang, onLanguageChange,
     brightness, onBrightnessChange, shadowContrast, onShadowChange,
     chromaticAberration, onChromaticToggle,
-    apiKey, onApiKeyChange
+    apiKey, onApiKeyChange,
+    aiModel, onAiModelChange
 }) {
     if (!isOpen) return null;
     const t = STRINGS[lang];
@@ -318,12 +319,36 @@ function SettingsModal({
 
                 <div style={{ marginTop: '15px', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid rgba(0, 255, 255, 0.2)' }}>
                     <div className="settings-row" style={{ display: 'block' }}>
-                        <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>GEMINI API KEY:</span>
+                        <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI MODEL:</span>
+                        <select
+                            value={apiKey && apiKey.startsWith('http') ? 'custom' : (aiModel || 'gemini-3-flash')}
+                            onChange={(e) => onAiModelChange(e.target.value)}
+                            style={{
+                                width: '100%',
+                                background: 'rgba(0, 0, 0, 0.4)',
+                                border: '1px solid #00FFFF',
+                                color: '#00FFFF',
+                                padding: '8px',
+                                fontFamily: 'monospace',
+                                fontSize: '12px',
+                                outline: 'none',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="gemini-3-flash">Gemini 3 Flash (Google)</option>
+                            <option value="cosmos-reasoning">NVIDIA Cosmos Reasoning</option>
+                        </select>
+                    </div>
+
+                    <div className="settings-row" style={{ display: 'block' }}>
+                        <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>
+                            {aiModel === 'cosmos-reasoning' ? 'COSMOS ENDPOINT URL:' : 'GEMINI API KEY:'}
+                        </span>
                         <input
                             type="password"
                             value={apiKey || ''}
                             onChange={(e) => onApiKeyChange(e.target.value)}
-                            placeholder="Enter Key..."
+                            placeholder={aiModel === 'cosmos-reasoning' ? "https://..." : "Enter Key..."}
                             style={{
                                 width: '100%',
                                 background: 'rgba(0, 0, 0, 0.4)',
@@ -495,7 +520,9 @@ export default function HUD({
     isAiOnline,
     aiQuote,
     navigationOverlay,
-    onToggleNav
+    onToggleNav,
+    aiModel,
+    onAiModelChange
 }) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -562,7 +589,7 @@ export default function HUD({
                             boxShadow: `0 0 10px ${isAiOnline ? '#00FFFF' : '#FFBF00'}`
                         }}></span>
                         <span style={{ color: '#00FFFF', fontWeight: 'bold', fontSize: '14px' }}>
-                            {isAiOnline ? '[GEMINI 3 PRO]' : '[HEURISTIC ENGINE]'}
+                            {isAiOnline ? `[${(aiModel || 'gemini').toUpperCase().replace(/-/g, ' ')}]` : '[HEURISTIC ENGINE]'}
                         </span>
                         <span style={{ color: '#aaa', fontSize: '12px' }}>
                             {driveMode === 'autopilot' ? 'FULL AUTOPILOT' : 'ADVISORY MODE'}
@@ -592,7 +619,7 @@ export default function HUD({
                     zIndex: 100
                 }}>
                     <div style={{ borderBottom: '1px solid rgba(0, 255, 255, 0.3)', marginBottom: '8px', paddingBottom: '4px', fontSize: '10px', opacity: 0.7 }}>
-                        [AI CONNECTION VERIFIED] - STRATEGIC QUOTE:
+                        [AI CONNECTION VERIFIED] - STRATEGIC QUOTE ({(aiModel || 'gemini').toUpperCase().replace(/-/g, ' ')}):
                     </div>
                     <div style={{ fontStyle: 'italic', lineHeight: '1.4' }}>
                         "{aiQuote}"
@@ -633,6 +660,8 @@ export default function HUD({
 
                 apiKey={apiKey}
                 onApiKeyChange={onApiKeyChange}
+                aiModel={aiModel || 'gemini-3-flash'}
+                onAiModelChange={onAiModelChange}
             />
 
             {/* Version Display */}
