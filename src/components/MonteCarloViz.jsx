@@ -37,7 +37,7 @@ function StrategicRoad({ waypoints, terrainData }) {
     if (!waypoints || waypoints.length < 2 || !terrainData) return null;
 
     const roadWidth = 6.4;
-    const segs = 25;
+    const segs = 15;
     const magenta = "#FF00FF";
     const cyan = "#00FFFF";
 
@@ -49,12 +49,13 @@ function StrategicRoad({ waypoints, terrainData }) {
 
         const targetPoint = waypoints[waypoints.length - 1];
         const prevPoint = waypoints[waypoints.length - 2];
-        const dir = new THREE.Vector3(targetPoint[0] - prevPoint[0], 0, targetPoint[1] - prevPoint[1]).normalize();
+        const rawDir = new THREE.Vector3(targetPoint[0] - prevPoint[0], 0, targetPoint[1] - prevPoint[1]);
+        const dir = (rawDir.lengthSq() < 0.001) ? new THREE.Vector3(0, 0, 1) : rawDir.normalize();
 
-        // SHARPER ARROW GEOMETRY
-        const arrowLength = 15;
-        const arrowWidth = 12.0;
-        const indentLength = 4.0;
+        // V8: SURGICAL ACUTE ARROW GEOMETRY
+        const arrowLength = 22;     // Longer for drama
+        const arrowWidth = 14.0;    // Wider base
+        const indentLength = 7.0;   // Deeper sharper indent
 
         const tip = new THREE.Vector3(targetPoint[0], 0, targetPoint[1]);
         const yBase = getTerrainHeight(terrainData.heightData, tip.x, tip.z, terrainData.size) + 3.0;
@@ -81,15 +82,17 @@ function StrategicRoad({ waypoints, terrainData }) {
                 const t = s / segs;
                 const x = start[0] + (end[0] - start[0]) * t;
                 const z = start[1] + (end[1] - start[1]) * t;
-                const distToIndent = Math.sqrt((x - indentC.x) ** 2 + (z - indentC.z) ** 2);
 
-                if (isLast && distToIndent < 0.5) break;
+                const dToTip = Math.sqrt((x - tip.x) ** 2 + (z - tip.z) ** 2);
+                if (isLast && dToTip < arrowLength - indentLength + 0.5) break;
 
                 const y = getTerrainHeight(terrainData.heightData, x, z, terrainData.size) + 3.05;
-                const nextX = start[0] + (end[0] - start[0]) * (t + 0.01);
-                const nextZ = start[1] + (end[1] - start[1]) * (t + 0.01);
-                const fwd = new THREE.Vector2(nextX - x, nextZ - z).normalize();
-                const rgt = new THREE.Vector2(-fwd.y, fwd.x);
+
+                const nextT = Math.min(1, t + 0.05);
+                const nX = start[0] + (end[0] - start[0]) * nextT;
+                const nZ = start[1] + (end[1] - start[1]) * nextT;
+                const fwd = new THREE.Vector2(nX - x, nZ - z).normalize();
+                const rgt = (fwd.lengthSq() < 0.1) ? new THREE.Vector2(-dir.z, dir.x) : new THREE.Vector2(-fwd.y, fwd.x);
 
                 const pL = new THREE.Vector3(x + rgt.x * (roadWidth / 2), y, z + rgt.y * (roadWidth / 2));
                 const pR = new THREE.Vector3(x - rgt.x * (roadWidth / 2), y, z - rgt.y * (roadWidth / 2));
@@ -106,7 +109,7 @@ function StrategicRoad({ waypoints, terrainData }) {
             }
         }
 
-        // 2. Head Geometry and Bridging
+        // 2. Head Geometry (ACUTE ANGLES)
         const roadEndIdxL = (vIdx - 1) * 2;
         const roadEndIdxR = (vIdx - 1) * 2 + 1;
         const headIdx = vertices.length / 3;
@@ -115,9 +118,11 @@ function StrategicRoad({ waypoints, terrainData }) {
 
         const bL = headIdx, bR = headIdx + 1, tP = headIdx + 2, iC = headIdx + 3;
 
-        indices.push(roadEndIdxL, roadEndIdxR, iC);
-        indices.push(roadEndIdxL, iC, bL);
-        indices.push(roadEndIdxR, bR, iC);
+        if (vIdx > 0) {
+            indices.push(roadEndIdxL, roadEndIdxR, iC);
+            indices.push(roadEndIdxL, iC, bL);
+            indices.push(roadEndIdxR, bR, iC);
+        }
 
         indices.push(bL, tP, iC);
         indices.push(bR, iC, tP);
@@ -127,7 +132,6 @@ function StrategicRoad({ waypoints, terrainData }) {
         geom.setIndex(indices);
         geom.computeVertexNormals();
 
-        // FIXED: Using Vector3 objects for perimeter, NOT indices
         return {
             ribbonGeom: geom,
             perimeter: [...leftArr, baseL, tip, baseR, ...rightArr.reverse()],

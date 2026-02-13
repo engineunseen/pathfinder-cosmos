@@ -180,11 +180,17 @@ export function generateTerrainData(seed) {
         rock.y = getHeightAtPosition(heightData, rock.x, rock.z);
     }
 
-    // Generate Earth beacon position — far away and on relatively flat ground
-    let beaconX = 70 + rng() * 20;
-    let beaconZ = -30 + rng() * 60;
-    if (rng() > 0.5) beaconX = -beaconX;
+    // Generate Earth beacon position — Far corner
+    const quadrantX = rng() > 0.5 ? 1 : -1;
+    const quadrantZ = rng() > 0.5 ? 1 : -1;
+
+    const beaconX = quadrantX * (65 + rng() * 25);
+    const beaconZ = quadrantZ * (65 + rng() * 25);
     const beaconY = getHeightAtPosition(heightData, beaconX, beaconZ) + 2;
+
+    // Generate Spawn point — Exact opposite quadrant
+    const spawnX = -quadrantX * (70 + rng() * 10);
+    const spawnZ = -quadrantZ * (70 + rng() * 10);
 
     return {
         heightData,
@@ -192,6 +198,7 @@ export function generateTerrainData(seed) {
         craters,
         rocks: filteredRocks,
         beacon: { x: beaconX, y: beaconY, z: beaconZ },
+        spawn: { x: spawnX, z: spawnZ },
         size: TERRAIN_SIZE,
         segments: TERRAIN_SEGMENTS,
         elementSize: TERRAIN_SIZE / TERRAIN_SEGMENTS,

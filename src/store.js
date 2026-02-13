@@ -2,6 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
+export const VERSION = "1.4.9";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -26,17 +27,16 @@ export const DRIVE_MODES = {
 };
 
 // ======== INITIAL STATE GENERATOR ========
-// Returns a fresh state object with a new random terrain seed
 export const getInitialState = () => ({
     language: 'EN',
     driveMode: DRIVE_MODES.MANUAL,
-    navigationOverlay: false, // Independent toggle
+    navigationOverlay: false,
     speed: 0,
     pitch: 0,
     roll: 0,
     battery: 100,
     targetDistance: 0,
-    simulationState: 'running', // 'running' | 'gameover' | 'success'
+    simulationState: 'running',
     failReason: '',
     safetyScore: 100,
     elapsedTime: 0,
@@ -45,14 +45,13 @@ export const getInitialState = () => ({
     roverPosition: [0, 2, 0],
     roverRotation: [0, 0, 0],
     inputState: { forward: 0, backward: 0, left: 0, right: 0, brake: false },
-    brightness: 1.2, // Exposure regulator
-    shadowContrast: 0.5, // Shadow darkness regulator
-    chromaticAberration: false, // OFF by default
-    apiKey: localStorage.getItem('pathfinder_api_key') || '', // Gemini API key
-    aiModel: 'gemini-3-flash', // Default model
+    brightness: 1.2,
+    shadowContrast: 0.5,
+    chromaticAberration: false,
+    apiKey: localStorage.getItem('pathfinder_api_key') || '',
+    aiModel: 'gemini-3-flash',
 });
 
-// ======== REDUCER ========
 function simulationReducer(state, action) {
     switch (action.type) {
         case 'SET_LANGUAGE':
@@ -81,15 +80,18 @@ function simulationReducer(state, action) {
                 ...getInitialState(),
                 language: state.language,
                 apiKey: state.apiKey,
-                // Override with new random seed just in case getInitialState logic changes
-                terrainSeed: Math.random() * 10000,
+                driveMode: DRIVE_MODES.MANUAL, // Force manual
+                navigationOverlay: false,      // Force overlay off
+                terrainSeed: state.terrainSeed, // Keeps the map
             };
         case 'NEW_TERRAIN':
             return {
                 ...getInitialState(),
                 language: state.language,
                 apiKey: state.apiKey,
-                terrainSeed: Math.random() * 10000,
+                driveMode: DRIVE_MODES.MANUAL,
+                navigationOverlay: false,
+                terrainSeed: Math.random() * 10000, // Changes the map
             };
         case 'SET_MONTE_CARLO':
             return { ...state, monteCarloResults: action.payload };
@@ -99,13 +101,12 @@ function simulationReducer(state, action) {
             localStorage.setItem('pathfinder_api_key', action.payload);
             return { ...state, apiKey: action.payload };
         case 'SET_AI_MODEL':
-            return { ...state, aiModel: action.payload }; // 'gemini-3-flash' | 'cosmos-reasoning'
+            return { ...state, aiModel: action.payload };
         default:
             return state;
     }
 }
 
-// ======== CONTEXT ========
 export const SimulationContext = createContext(null);
 export const SimulationDispatchContext = createContext(null);
 

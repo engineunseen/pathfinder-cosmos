@@ -64,8 +64,8 @@ function ChamferBox({ args, bevel = 0.05, color, metalness, roughness, ...props 
 const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 0], terrainData }, ref) => {
     const dispatch = useSimulationDispatch();
 
-    // Internal state refs
-    const position = useRef([0, 0, 0]);
+    // Internal state refs — V1.4.7: Initialize with startPosition to avoid [0,0,0] loop
+    const position = useRef(startPosition || [0, 0, 0]);
     const velocity = useRef([0, 0, 0]);
     const rotation = useRef([0, 0, 0, 1]);
     const angVelocity = useRef([0, 0, 0]);
@@ -100,11 +100,17 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
 
     // Sync physics state
     useEffect(() => {
+        if (!api || !api.position || !api.quaternion) return;
         const unsubPos = api.position.subscribe((v) => (position.current = v));
         const unsubRot = api.quaternion.subscribe((v) => (rotation.current = v));
         const unsubVel = api.velocity.subscribe((v) => (velocity.current = v));
         const unsubAng = api.angularVelocity.subscribe((v) => (angVelocity.current = v));
-        return () => { unsubPos(); unsubRot(); unsubVel(); unsubAng(); };
+        return () => {
+            if (unsubPos) unsubPos();
+            if (unsubRot) unsubRot();
+            if (unsubVel) unsubVel();
+            if (unsubAng) unsubAng();
+        };
     }, [api]);
 
     // Expose API

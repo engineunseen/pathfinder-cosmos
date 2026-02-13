@@ -5,9 +5,10 @@ import * as THREE from 'three';
 
 import { OrbitControls } from '@react-three/drei';
 
-export function CameraController({ targetPosition, enabled }) {
+export function CameraController({ targetPosition, enabled, seed, snapPosition }) {
     const { camera, gl } = useThree();
     const controlsRef = useRef();
+    const lastSeed = useRef(null); // V1.4.9: Init with null to force initial snap
     const prevTarget = useRef(new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2]));
 
     useFrame((state, delta) => {
@@ -17,23 +18,32 @@ export function CameraController({ targetPosition, enabled }) {
         const ty = targetPosition[1];
         const tz = targetPosition[2];
 
-        // 1. Calculate how much the rover moved since last frame
+        // V1.4.9: UNIVERSAL CAMERA SNAP - Force jump on mount and map refresh
+        if (seed !== lastSeed.current) {
+            // Use snapPosition if available, otherwise targetPosition (fallback)
+            const sx = snapPosition ? snapPosition[0] : tx;
+            const sy = snapPosition ? snapPosition[1] : ty;
+            const sz = snapPosition ? snapPosition[2] : tz;
+
+            camera.position.set(sx + 5, sy + 4, sz + 8); // Offset chosen for 1/3 frame framing
+            controlsRef.current.target.set(sx, sy, sz);
+            controlsRef.current.update();
+            lastSeed.current = seed;
+            prevTarget.current.set(sx, sy, sz);
+            return;
+        }
+
+        // Standard Relative Follow
         const dx = tx - prevTarget.current.x;
         const dy = ty - prevTarget.current.y;
         const dz = tz - prevTarget.current.z;
 
-        // 2. Move camera by the same amount (Follow Mode)
-        // This preserves the relative offset/rotation set by the user via mouse
         camera.position.x += dx;
         camera.position.y += dy;
         camera.position.z += dz;
 
-        // 3. Update OrbitControls target to look at new position
         controlsRef.current.target.set(tx, ty, tz);
-
-        // 4. Update history
         prevTarget.current.set(tx, ty, tz);
-
         controlsRef.current.update();
     });
 
