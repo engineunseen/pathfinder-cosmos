@@ -8,73 +8,63 @@ const GEMINI_MODEL = "gemini-3-flash-preview";
 // LEVEL 1: STRATEGIC PLANNER
 // ============================================================
 
-export async function planStrategicRoute(apiKey, heightmapData, startPos, targetPos, terrainSize, aiModel = 'gemini-3-flash', language = 'EN') {
-    let actualKey = "";
-    if (typeof apiKey === 'string') actualKey = apiKey.trim();
-    else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
-
-    if (!actualKey || actualKey === "" || actualKey === "undefined") {
-        return { waypoints: generateFallbackRoute(startPos, targetPos), quote: "Offline: No API key found." };
-    }
-
-    const activeModel = (aiModel === 'gemini-3-pro' || aiModel === 'gemini-1.5-pro')
-        ? "gemini-3-pro-preview"
-        : "gemini-3-flash-preview";
-
-    try {
-        const imageBase64 = heightmapToImage(heightmapData);
-        const timestamp = Date.now();
-
-        // V10: Localization Instruction Added
-        const textPrompt = `You are the Tactical Scout AI for the Unseen Pathfinder Mission. [ID: ${timestamp}]
+const ARCHITECT_PROMPT_TEMPLATE = (language, terrainSize, startPos, targetPos, timestamp) => `You are the Strategic Planning AI for the Unseen Pathfinder Mission. [ID: ${timestamp}]
 Your task is to analyze the attached Lunar Heightmap and plan a SAFE route for the rover.
 
 MAP SEMANTICS:
-- The image is a Top-Down Grayscale Heightmap.
-- BRIGHTER pixels = Higher Elevation (Craters rims, hills).
+- The image is a Top-Down Grayscale Heightmap of a 200m x 200m area.
+- BRIGHTER pixels = Higher Elevation (Craters rims, basaltic ridges).
 - DARKER pixels = Lower Elevation (Cater floors, valleys).
-- VERY DARK small spots = Hazardous rocks/boulders.
-
-LUNAR PHYSICS CONSTRAINTS:
-- Gravity: 1.62 m/s².
-- Max Slope: 25 degrees. High-brightness gradients are FATAL.
-- Rover Stability: Avoid planning through the center of small deep craters.
+- VERY DARK small spots = Hazardous rocks and boulders.
 
 WORLD COORDINATES:
 - Center: [0, 0]. Size: ${terrainSize}m. Bounds: [-${terrainSize / 2}, ${terrainSize / 2}].
 - START: [${startPos[0].toFixed(1)}, ${startPos[2].toFixed(1)}]
 - TARGET BEACON: [${targetPos[0].toFixed(1)}, ${targetPos[2].toFixed(1)}]
 
-PLANNING PROTOCOL:
-1. REASONING: Analyze hazards (craters, rocks, steep slopes).
-2. STRATEGY: Define a curved, jagged path. 
-3. NO STRAIGHT LINES: Strict requirement to navigate micro-relief and avoid boulders.
-4. OUTPUT: Exactly 12-16 waypoints [x, z] for high-fidelity navigation.
+MISSION LOGIC & JSON REQUIREMENTS:
+1. STRATEGIC ANALYSIS: You MUST conduct a deep technical analysis of the grayscale heightmap. Identify specific topographic hazards (crater rims, basaltic ridges, boulder fields).
+2. TRAJECTORY LOGIC: You MUST explain exactly why your path deviates from the direct line. Detail the physics of 'traction vs slope' and how you are navigating micro-relief.
+3. NO LIMITS: Write as much as needed for a professional mission architect report. The mission control terminal has scrolling enabled.
+4. JSON OUTPUT FORMAT: Strictly valid JSON only.
 
-LANGUAGE REQUIREMENT:
-- You MUST provide the 'reasoning' and 'quote' in the following language: ${language}.
-- If RU: use Russian. If UA: use Ukrainian. Default: English.
-
-PERSONALITY & QUOTE CONSTRAINTS:
-- STRICT FAILURE CONDITION: DO NOT use historical clichés.
-- FORBIDDEN TO MENTION: Neil Armstrong, "One small step", "Giant leap", or "Eagle has landed". Using these will count as a system malfunction.
-- ACT as a professional tactical scout navigator. Respond as if transmitting technical data to a rover pilot.
-- GENERATE a unique, short, technical quote about the local terrain gradients, regolith density, or basaltic hazards.
-- Sounds like: "Basaltic ridge detected at vector 045. Jagged approach confirmed to maximize traction." or "Thermal bloom in regolith detected. Deviating from linear path to preserve motor integrity."
-
-JSON ONLY FORMAT:
+JSON SCHEMA:
 {
-  "reasoning": "...",
-  "waypoints": [[x1, z1], ...],
-  "quote": "..."
-}`;
+  "waypoints": [[x, z], ...], 
+  "reasoning": "[Comprehensive mission architect report. Multi-paragraph. Detailed topography analysis, physics constraints, and pathfinding logic. Refer to specific sectors or hazards.]",
+  "quote": "[A mission-appropriate scientific quote or status alert]"
+}
+
+CONSTRAINTS:
+- FORBIDDEN TO MENTION: Neil Armstrong, "One small step", "Giant leap", or "Eagle has landed".
+- PERSONALITY: High-level Mission Architect. Technically dense. Aggressive safety margins. Use terms like 'regolith', 'basaltic', 'thermal bloom', 'gradient variance', 'isostatic balance'.
+- LANGUAGE: Respond in: ${language}.
+`;
+
+export async function planStrategicRoute(apiKey, heightmapData, startPos, targetPos, terrainSize, aiModel = 'gemini-3-flash-preview', language = 'EN') {
+    let actualKey = "";
+    if (typeof apiKey === 'string') actualKey = apiKey.trim();
+    else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
+
+    if (!actualKey || actualKey === "" || actualKey === "undefined") {
+        return { waypoints: [], quote: "FATAL: Navigation SDK Offline. No API Key.", reasoning: "CRITICAL: Mission Architect cannot initialize without authorization.", isAi: false };
+    }
+
+    const activeModel = (aiModel.includes('pro'))
+        ? "gemini-3-pro-preview"
+        : "gemini-3-flash-preview";
+
+    try {
+        const imageBase64 = heightmapToImage(heightmapData);
+        const timestamp = Date.now();
+        const textPrompt = ARCHITECT_PROMPT_TEMPLATE(language, terrainSize, startPos, targetPos, timestamp);
 
         const genAI = new GoogleGenerativeAI(actualKey);
         const model = genAI.getGenerativeModel({
             model: activeModel,
             generationConfig: {
                 temperature: 0.85,
-                maxOutputTokens: 1000
+                maxOutputTokens: 4096
             }
         });
 
@@ -92,7 +82,7 @@ JSON ONLY FORMAT:
         try {
             return await planStrategicRouteFetch(actualKey, heightmapData, startPos, targetPos, terrainSize, activeModel, language);
         } catch (fetchErr) {
-            return { waypoints: generateFallbackRoute(startPos, targetPos), quote: `AI Error: ${err.message}` };
+            return { waypoints: [], quote: `FATAL: AI NAVIGATOR FAILURE [${err.message}]`, reasoning: "Mission Aborted: Critical failure in strategic calculation stack.", isAi: false };
         }
     }
 }
@@ -101,25 +91,58 @@ async function planStrategicRouteFetch(key, heightmapData, startPos, targetPos, 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
     const imageBase64 = heightmapToImage(heightmapData);
     const timestamp = Date.now();
+    const textPrompt = ARCHITECT_PROMPT_TEMPLATE(language, terrainSize, startPos, targetPos, timestamp);
+
     const payload = {
         contents: [{
             parts: [
-                { text: `Plan safe lunar route. Obey physics. Language: ${language}. JSON ONLY: {"waypoints":..., "quote": "...", "reasoning": "..."}. Bounds[±${terrainSize / 2}]` },
+                { text: textPrompt },
                 { inline_data: { mime_type: "image/png", data: imageBase64 } }
             ]
         }],
-        generationConfig: { temperature: 0.9 }
+        generationConfig: { temperature: 0.85, maxOutputTokens: 4096 }
     };
     const response = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`Fetch Error: ${response.status}`);
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`REST API Error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+    }
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     return parseResponse(text, startPos, targetPos, terrainSize);
 }
 
 // ============================================================
-// LEVEL 1.1: QUOTE SANITIZER & FACT BANK
+// LEVEL 1.1: SCIENTIFIC SPECIALIST (THE SCIENCE CORE)
 // ============================================================
+
+export async function getScientificSpecialistReport(apiKey, language = 'EN') {
+    let actualKey = "";
+    if (typeof apiKey === 'string') actualKey = apiKey.trim();
+    else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
+
+    if (!actualKey) return { quote: "PHYSICS CORE OFFLINE.", isAi: false };
+
+    const textPrompt = `You are the Physical Specialist for the Unseen Pathfinder Mission.
+Your task is to provide a single, unique, technically dense scientific quote or status alert about the lunar environment.
+
+TECHNICAL CONSTRAINTS:
+- Use terms like: 'regolith friction', 'isostatic balance', 'thermal gradient', 'basaltic opacity', 'low-gravity traction'.
+- AVOID: Historical clichés, Armstrong, or poetic metaphors.
+- FOCUS: Pure physics and geological observations.
+- LANGUAGE: ${language}.
+`;
+
+    try {
+        const genAI = new GoogleGenerativeAI(actualKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+        const result = await model.generateContent(textPrompt);
+        const text = result.response.text().replace(/"/g, '').trim();
+        return { quote: text, isAi: true };
+    } catch (e) {
+        return { quote: "DATA STREAM CORRUPTED.", isAi: false };
+    }
+}
 
 const FACT_BANK = [
     "A day on Venus is longer than its year; the planet spins backward relative to most peers.",
@@ -175,6 +198,9 @@ function sanitizeAndEnhanceQuote(rawQuote) {
 }
 
 function parseResponse(text, startPos, targetPos, terrainSize) {
+    console.log("[AI ARCHITECT] Raw Response Received:", text);
+
+    // Robust JSON extraction
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         try {
@@ -182,7 +208,8 @@ function parseResponse(text, startPos, targetPos, terrainSize) {
             const parsed = JSON.parse(cleanJson);
 
             const halfSize = terrainSize / 2;
-            const validWaypoints = (parsed.waypoints || []).map(wp => [
+            const rawWaypoints = (parsed.waypoints || []);
+            const validWaypoints = rawWaypoints.map(wp => [
                 Math.max(-halfSize, Math.min(halfSize, wp[0])),
                 Math.max(-halfSize, Math.min(halfSize, wp[1]))
             ]);
@@ -190,13 +217,21 @@ function parseResponse(text, startPos, targetPos, terrainSize) {
             return {
                 waypoints: validWaypoints.length > 0 ? validWaypoints : generateFallbackRoute(startPos, targetPos),
                 quote: sanitizeAndEnhanceQuote(parsed.quote),
-                reasoning: parsed.reasoning || ""
+                reasoning: parsed.reasoning || "Analysis complete but no descriptive reasoning provided.",
+                isAi: true
             };
         } catch (e) {
-            console.error("JSON Parse Error:", e, text);
+            console.error("[AI Navigator] JSON Parse Error. Raw text:", text);
         }
     }
-    return { waypoints: generateFallbackRoute(startPos, targetPos), quote: FACT_BANK[Math.floor(Math.random() * FACT_BANK.length)] };
+
+    // Total Transparency Fallback: Return raw text as reasoning so the user can see it
+    return {
+        waypoints: [],
+        quote: "CRITICAL: Response Format Violation.",
+        reasoning: `The AI Architect failed to return valid JSON. Potential data corruption or safety filter block.\n\nRAW TELEMETRY DATA RECEIVED:\n------------------------\n${text || "[EMPTY RESPONSE]"}\n------------------------`,
+        isAi: false
+    };
 }
 
 // ============================================================
@@ -215,8 +250,11 @@ export async function getAutopilotCommand(apiKey, state, aiModel = 'gemini-3-fla
     if (!actualKey || actualKey === "undefined") return getHeuristicCommand(state);
 
     try {
-        const genAI = new GoogleGenAI({ apiKey: actualKey });
-        const model = genAI.getGenerativeModel({ model: activeModel, generationConfig: { temperature: 0.4 } });
+        const genAI = new GoogleGenerativeAI(actualKey);
+        const model = genAI.getGenerativeModel({
+            model: activeModel,
+            generationConfig: { temperature: 0.4, maxOutputTokens: 256 }
+        });
         const textPrompt = `Rover autopilot. JSON {"steer": X, "throttle": Y}. STATE: Pos[${position[0].toFixed(1)}, ${position[2].toFixed(1)}], Target[${currentWaypoint[0].toFixed(1)}, ${currentWaypoint[1].toFixed(1)}]`;
         const result = await model.generateContent(textPrompt);
         return parseAutopilotResponse(result.response.text());

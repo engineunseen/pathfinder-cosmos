@@ -121,7 +121,7 @@ export default function SimulationApp() {
     const planningKey = `${state.terrainSeed}_${state.aiModel}_${state.apiKey}`;
     if (lastPlannedSeed.current === planningKey && waypoints.length > 0) return; // Already planned for this map
 
-    console.log(`[AI] Start Manual Planning for seed: ${state.terrainSeed}`);
+    console.log(`[AI] Start Strategic Planning for seed: ${state.terrainSeed}`);
     planningInProgressRef.current = true;
     lastPlannedSeed.current = planningKey;
 
@@ -141,7 +141,7 @@ export default function SimulationApp() {
     try {
       const startPos = telemetryRef.current.position || [0, 0, 0];
       const targetPos = [terrainData.beacon.x, terrainData.beacon.y, terrainData.beacon.z];
-      const aiLang = (state.language === 'RU' || state.language === 'UA') ? 'UA' : 'EN';
+      const aiLang = (state.language === 'RU' || state.language === 'UA') ? state.language : 'EN';
 
       const result = await planStrategicRoute(
         state.apiKey,
@@ -158,14 +158,45 @@ export default function SimulationApp() {
         setAiQuote(result.quote);
         setCurrentWaypointIdx(0);
 
-        // Log AI Reasoning to Terminal
-        dispatch({ type: 'ADD_LOG', payload: { text: "AI ARCHITECT: STRATEGIC ROUTE COMMITTED.", type: 'info' } });
-        if (result.reasoning) {
-          dispatch({ type: 'ADD_LOG', payload: { text: `AI LOGIC: ${result.reasoning}`, type: 'system' } });
+        if (result.isAi && result.reasoning) {
+          dispatch({
+            type: 'ADD_LOG',
+            payload: {
+              text: `AI ARCHITECT STRATEGIC ANALYSIS:\n${result.reasoning}`,
+              type: 'system'
+            }
+          });
+        } else {
+          // TOTAL DISCLOSURE: No faking
+          dispatch({
+            type: 'ADD_LOG',
+            payload: {
+              text: `CRITICAL ERROR: AI ARCHITECT DISCONNECTED.\n${result.reasoning || "NO TELEMETRY RECEIVED."}`,
+              type: 'critical'
+            }
+          });
+          setIsAiPlanning(false);
+          planningInProgressRef.current = false;
+          return; // STOP MISSION
         }
+
         if (result.quote) {
-          dispatch({ type: 'ADD_LOG', payload: { text: `AI QUOTE: "${result.quote}"`, type: 'info' } });
+          dispatch({
+            type: 'ADD_LOG',
+            payload: {
+              text: `AI QUOTE: "${result.quote}"`,
+              type: 'info'
+            }
+          });
         }
+
+        dispatch({
+          type: 'ADD_LOG',
+          payload: {
+            text: "AI ARCHITECT: STRATEGIC ROUTE COMMITTED.",
+            type: 'info'
+          }
+        });
       }
     } catch (e) {
       console.error("[AI] Strategic Planning Error:", e);

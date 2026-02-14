@@ -1,0 +1,50 @@
+{
+    "protocol_version": "1.0.0",
+    "project_name": "Unseen Pathfinder: Genesis",
+    "core_philosophy": "Reasoning Intelligence (AI) + Kinetic Imagination (Monte Carlo) = Mission Success. No heuristics. No fake progress.",
+    "system_architecture": {
+        "world_manifest": {
+            "geometry": "Spherical [Global Lunar Scale]",
+            "topology": "Procedural heightmaps with cratering logic (Little Prince style)",
+            "physics": {
+                "gravity": 1.62,
+                "friction_model": "Dynamic Regolith"
+            }
+        },
+        "agent_hierarchy": {
+            "level_1_architect": {
+                "role": "Strategic Planner",
+                "input": "Spherical Sector Heightmap Data",
+                "output": "Navigational Waypoints Vector",
+                "logic": "Deep topographic hazards analysis. No straight lines. Respects gradient variance."
+            },
+            "level_2_povodir": {
+                "role": "Tactical Guide (Autopilot)",
+                "input": "Architect Waypoints + Real-time Telemetry + Monte Carlo Risk Data",
+                "output": "Steer/Throttle commands",
+                "logic": "Executes the long-term plan while surviving immediate physics violations."
+            },
+            "level_3_monte_carlo": {
+                "role": "Physical Imagination Engine",
+                "mechanism": "Stochastic branching of 60+ parallel futures",
+                "time_horizon": "3.0 seconds",
+                "metrics": {
+                    "sCVaR": "Spectral Conditional Value at Risk (Severity of failure)",
+                    "SMaR": "Safety Margin at Risk (Buffer to rollover)"
+                }
+            }
+        }
+    },
+    "operational_modes": {
+        "manual": "Human control. Ground-truth kinetics.",
+        "ai_assist": "Human control + Monte Carlo overlay (Ghost Trajectories).",
+        "full_autopilot": "Povodir-driven trajectory based on Architect path, throttled by sCVaR/SMaR thresholds."
+    },
+    "instruction_to_next_agent": {
+        "step_0": "Initialize spherical world with raycast-based surface mapping.",
+        "step_1": "Implement the Monte Carlo worker as the primary source of truth for risk.",
+        "step_2": "Integrate Reasoning API (Gemini/Cosmos) as the Architect role.",
+        "step_3": "Build the Povodir logic to dynamically weight Architect waypoints against Monte Carlo 'Red' zones.",
+        "step_4": "Enforce 100% Transparency. Never use heuristics to hide AI unavailability."
+    }
+}

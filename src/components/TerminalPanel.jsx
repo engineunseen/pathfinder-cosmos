@@ -32,7 +32,7 @@ export default function TerminalPanel() {
 
             <div className="terminal-container">
                 <div className="terminal-header">
-                    <span className="terminal-title">SYSTEM TERMINAL v0.7.4</span>
+                    <span className="terminal-title">SYSTEM TERMINAL v0.7.5-alpha</span>
                     <div className="terminal-status-dots">
                         <span className="dot" />
                         <span className="dot" />

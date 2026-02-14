@@ -2,7 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v0.7.4-alpha";
+export const VERSION = "v0.7.5-alpha";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -49,7 +49,7 @@ export const getInitialState = () => ({
     shadowContrast: 0.5,
     chromaticAberration: false,
     apiKey: localStorage.getItem('pathfinder_api_key') || '',
-    aiModel: 'gemini-3-flash',
+    aiModel: 'gemini-3-flash-preview',
     logs: [{ id: Date.now(), text: "SYSTEM: INITIALIZING NAVIGATION STACK...", type: 'info' }],
     terminalOpen: false,
 });

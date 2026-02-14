@@ -1,140 +1,75 @@
 # UNSEEN PATHFINDER: Project Architecture & Development Status
-**Version:** v0.7.0-alpha
-**Date:** February 12, 2026
-**Framework:** React + Three.js + Cannon.js (Physics)
+**Version:** v0.7.5-alpha
+**Date:** February 14, 2026
+**Engine:** React + Three.js + Cannon.js + Gemini 3.0
 
-## 1. Core Concept & Vision
-**"NVIDIA Cosmos / Gemini 2.5 Powered Lunar Navigation System"**
+## 1. Core Concept: The "Cognitive Bridge"
+This project demonstrates a "Cognitive Bridge" where **Generative Intelligence** (Strategic Brain) communicates with a **Kinetic Engine** (Monte Carlo Imagination) to navigate unknown environments.
 
-This project is a high-fidelity simulation of a lunar rover's navigation stack. It combines **Generative AI** (Strategic Planning) with **Monte Carlo Physics Simulations** (Tactical Validation) to navigate complex terrain safely.
-
-Goal: Demonstrate how reasoning AI (NVIDIA Cosmos / Gemini 2.5) can control a physical agent in a high-risk environment by using a physics engine as its "imagination" to validate decisions.
-
----
-
-## 2. Key Metrics (The "Insticts")
-The system relies on two critical risk metrics derived from Monte Carlo simulations:
-
-### **sCVaR (Spectral Conditional Value at Risk)**
-- **Meaning:** "How bad will it hurt if things go wrong?"
-- **Function:** Measures the severity of tail risks (worst-case scenarios).
-- **Thresholds:**
-    - `0 - 30`: Safe.
-    - `30 - 60`: Warning (Impact likely).
-    - `> 60`: Critical (High chance of mission failure).
-- **Use:** Modulates speed. High sCVaR = Slow down immediately.
-
-### **SMaR (Safety Margin at Risk)**
-- **Meaning:** "How close are we to the edge?"
-- **Function:** Measures the buffer between the current state and failure (e.g., rollover angle).
-- **Thresholds:**
-    - `> 35`: Comfortable margin.
-    - `15 - 35`: Caution (Approaching limits).
-    - `< 15`: Danger (Point of no return).
-- **Use:** Modulates aggression. Low SMaR = Gentle steering, no sudden moves.
+- **Dream Layer**: AI predicts a safe route based on visuals.
+- **Imagination Layer**: Monte Carlo simulates the physics of that dream.
+- **Action Layer**: The rover executes verified trajectories.
 
 ---
 
-## 3. Architecture Layers
+## 2. Multi-Agent AI Stack (Level 1 & 2)
 
-### **Level 1: The STRATEGIST (AI Planner)**
-- **Engine:** Google Gemini 2.5 Pro (via API). *Planned upgrade to NVIDIA Cosmos Server.*
-- **Input:** 16x16 Downsampled Heightmap + Start Pos + Global Target.
-- **Output:** JSON Array of Waypoints (Strategic Route).
-- **Function:** "Looks" at the map from above and plans a general path avoiding large obstacles (craters, cliffs).
-- **Execution:** Runs ONCE when a new terrain is generated.
+### **The STRATEGIC ARCHITECT (The Mapper)**
+- **Model:** `gemini-3-flash-preview`.
+- **Function:** Analyzes 257x257 Grayscale Topography.
+- **Logic:** Identifies hazards (craters, ridges) and provides a dense reasoning report.
+- **Strict Protocol:** No heuristics. No cliches. Pure technical analysis.
 
-### **Level 2: The AUTOPILOT (Tactical AI)**
-- **Engine:**
-    1.  **AI Navigator (Gemini 2.5 Pro):** Receives current telemetry + fan data + metrics. Outputs specific `{steer, throttle}` commands.
-    2.  **Heuristic Fallback:** Used if API key is missing or network fails. Follows strategic waypoints while avoiding "Red" paths in the Monte Carlo fan.
-- **Input:**
-    - Telemetry (Speed, Pitch, Roll).
-    - Strategic Waypoint (Immediate goal).
-    - **Monte Carlo Fan:** 60 simulated futures projected 3s ahead.
-- **Function:** Executes the strategic plan while reacting to immediate physics realities (slip, rocks, slope).
-- **Logic:**
-    - "If fan says forward is blocked, try reverse."
-    - "If sCVaR is high, crawl."
-    - "If SMaR is low, steer gently away from tilt."
-
-### **Level 3: The PHYSICS ENGINE (Monte Carlo Validator)**
-- **Engine:** `cannon-es` running in a Web Worker (`monteCarlo.worker.js`).
-- **Function:** "Imagination Engine".
-- **Process:**
-    1.  Takes current rover state.
-    2.  Spawns **60 parallel universes** (clones of the rover).
-    3.  Applies random noise to controls (Steering ±70°, Throttle ±20%).
-    4.  Simulates physics for **3.0 seconds**.
-    5.  Evaluates outcomes (Rollover? Stuck? High tilt?).
-    6.  Colors trajectories: Green (Safe), Yellow (Warning), Red (Critical).
-    7.  Calculates sCVaR and SMaR for the ensemble.
+### **The PHYSICAL SPECIALIST (The Scientist)**
+- **Model:** `gemini-3-flash-preview` (Isolated stream).
+- **Function:** Real-time physics reporting. Monitors regolith friction and thermal gradients.
+- **Output:** Technical status alerts in the system terminal.
 
 ---
 
-## 4. Modes of Operation
-
-1.  **MANUAL (Human Driver)**
-    - User controls Rover via WASD/Joystick.
-    - **No assistance.** Pure physics.
-
-2.  **MC ASSIST (Co-Pilot)**
-    - User controls Rover.
-    - **Monte Carlo Fan** is visible, showing future consequences of current input.
-    - **HUD** displays real-time sCVaR / SMaR.
-    - User optimizes path based on visual feedback ("Don't drive into red lines").
-
-3.  **AUTOPILOT (AI Agent)**
-    - **Full Control.** AI takes the wheel.
-    - Follows **Strategic Route** (Level 1).
-    - Reacts to **Monte Carlo Fan** (Level 3).
-    - Modulates speed based on **Metrics**.
-    - Capable of **Reverse Maneuvers** to escape dead ends.
+## 3. The Physical Layer: MONTE CARLO (Level 3)
+- **Engine:** `cannon-es` via Web Workers.
+- **Function:** Ground-truth validation.
+- **Mechanism:**
+    1.  Clones the rover into **60 parallel futures**.
+    2.  Projects movement 3.0s ahead with stochastic noise.
+    3.  Calculates **sCVaR** (Worst-case severity) and **SMaR** (Safety buffer).
+- **Transparency:** The terminal logs any discrepancy between AI "hopes" and Physics "reality."
 
 ---
 
-## 5. Current Development Status (v0.7.0-alpha)
+## 4. Operational Transition (v0.7.5+)
+- **Manual Mode**: Direct human control with MC visuals (Co-Pilot).
+- **Autopilot (Strategic)**: The rover follows the ARCHITECT's path while the MC Engine throttles speed based on real-time sCVaR.
+- **AI Autopilot (Planned)**: An end-to-end AI driver that uses the MC fan as direct feedback to stay in "Green" futures.
+
+---
+
+## 5. Development Progress
 
 - **Completed:**
-    - [x] Full 3D Lunar Environment (Three.js).
-    - [x] Realistic Rover Physics (Suspension, friction, gravity).
-    - [x] Procedural Terrain Generation (Perlin noise + Rocks).
-    - [x] Monte Carlo Engine (Web Worker, 60 samples, 3s horizon).
-    - [x] Risk Metrics (sCVaR, SMaR) implementation.
-    - [x] Fan Visualization (Green/Yellow/Red trajectories).
-    - [x] **AI Navigator Module (`aiNavigator.js`):** Gemini 2.5 Integration.
-    - [x] **Settings Panel:** Input for Gemini API Key.
-    - [x] **Strategic Planning:** Auto-plans route on map load.
-    - [x] **Autopilot Logic:** Follows waypoints + Metrics-aware speed.
+    - [x] Multi-Agent AI Role Separation (Architect/Specialist).
+    - [x] Terminal Support for Grayscale Topology Images.
+    - [x] Elimination of "Manual/Heuristic" fallbacks in strategic mode.
+    - [x] High-density reasoning logs (Raw AI thoughts).
+    - [x] Risk Metrics (sCVaR/SMaR) synchronization.
 
-- **Next Steps:**
-    - [ ] **NVIDIA Cosmos Integration:** Replace Gemini with local/server Cosmos instance.
-    - [ ] **Data Collection:** Save "training runs" to fine-tune the Strategist.
-    - [ ] **Advanced Strategy:** Re-planning when stuck (currently uses local escape).
+- **Incoming:**
+    - [ ] **AI-Driven Autopilot**: Dynamic steering based on MC fan results.
+    - [ ] **NVIDIA Cosmos Reasoning**: Integration of the edge-calculus server.
 
 ---
 
-## 6. How to Run & Recover
+## 6. Maintenance & Dev Workflow
 
-**Requirements:** Node.js, NPM.
+**Safety Protocol:**
+- DO NOT use older Gemini models (1.5).
+- DO NOT implement heuristic shortcuts to "fake" AI progress. 
+- ALWAYS log raw AI responses to ensure transparency.
 
-**Installation:**
-```bash
-npm install
-```
+**Version Tagging:**
+- Updated in `HUD.jsx` and `store.js`. Current: **v0.7.5-alpha**.
 
-**Run Development Server:**
-```bash
-npm run dev
-```
-
-**Git Workflow:**
-- We use iterative commits with semantic versioning tags in `HUD.jsx`.
-- Current Version: **v0.7.0-alpha**.
-
-**Recovery Instructions (If Power Lost):**
-1.  Check `PROJECT_ARCHITECTURE.md` (this file) to understand the system.
-2.  Open `src/aiNavigator.js` to see the AI integration logic.
-3.  Open `src/monteCarlo.worker.js` to see the physics/risk engine.
-4.  Open `src/App.jsx` to see the control loop (Manual/AI switching).
-5.  Restore API Key in HUD Settings (it saves to localStorage).
+---
+**Restoration Guide:**
+Follow coordinates in `STRATEGIC_PLANNER_MODE_RU.md` for specific AI prompting protocols.
