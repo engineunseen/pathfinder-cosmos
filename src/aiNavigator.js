@@ -260,7 +260,7 @@ function generateFallbackRoute(startPos, targetPos) {
 }
 
 let hCanvas = null;
-function heightmapToImage(hData) {
+export function heightmapToImage(hData) {
     if (!hData) return "";
     // Target side 257x257 for optimal AI processing
     const targetSide = 257;

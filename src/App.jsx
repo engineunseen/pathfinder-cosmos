@@ -32,7 +32,7 @@ import { LunarLighting, CameraController } from './components/Scene';
 import Dust from './components/Dust';
 
 // AI Navigation System
-import { planStrategicRoute, getAutopilotCommand, summarizeFan } from './aiNavigator';
+import { planStrategicRoute, getAutopilotCommand, summarizeFan, heightmapToImage } from './aiNavigator';
 
 // Terrain Generation Utility
 import { generateTerrainData } from './terrain';
@@ -128,7 +128,15 @@ export default function SimulationApp() {
     setIsAiPlanning(true);
     setWaypoints([]); // Clear visual IMMEDIATELY on intent
     setAiQuote("");
-    dispatch({ type: 'ADD_LOG', payload: { text: "AI ARCHITECT: SCANNING LUNAR TOPOLOGY...", type: 'info' } });
+    const terrainImage = heightmapToImage(terrainData.heightData);
+    dispatch({
+      type: 'ADD_LOG',
+      payload: {
+        text: "AI ARCHITECT: SCANNING LUNAR TOPOLOGY [257x257 RAW DATA]...",
+        type: 'info',
+        image: terrainImage
+      }
+    });
 
     try {
       const startPos = telemetryRef.current.position || [0, 0, 0];

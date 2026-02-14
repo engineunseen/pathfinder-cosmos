@@ -60,7 +60,8 @@ function simulationReducer(state, action) {
             const newLog = {
                 id: Date.now() + Math.random(),
                 text: action.payload.text,
-                type: action.payload.type || 'info', // 'info', 'warning', 'critical'
+                type: action.payload.type || 'info',
+                image: action.payload.image,
                 timestamp: new Date().toLocaleTimeString()
             };
             return {

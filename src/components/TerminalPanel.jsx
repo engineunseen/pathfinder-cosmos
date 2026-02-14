@@ -44,9 +44,20 @@ export default function TerminalPanel() {
                     {logs.map((log) => (
                         <div key={log.id} className={`terminal-line ${log.type}`}>
                             <span className="line-timestamp">[{log.timestamp || '--:--:--'}]</span>
-                            <span className="line-text" style={{ color: LOG_COLORS[log.type] || LOG_COLORS.info }}>
-                                {log.text}
-                            </span>
+                            <div className="line-body" style={{ display: 'flex', flexDirection: 'column', gap: '5px', flex: 1 }}>
+                                <span className="line-text" style={{ color: LOG_COLORS[log.type] || LOG_COLORS.info }}>
+                                    {log.text}
+                                </span>
+                                {log.image && (
+                                    <div className="line-image-container" style={{ marginTop: '5px', border: '1px solid rgba(0, 255, 255, 0.2)', padding: '2px', background: 'rgba(0, 0, 0, 0.4)', alignSelf: 'flex-start' }}>
+                                        <img
+                                            src={`data:image/png;base64,${log.image}`}
+                                            alt="LUNAR TOPOLOGY"
+                                            style={{ width: '128px', height: '128px', display: 'block', imageRendering: 'pixelated' }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     ))}
                     <div className="terminal-scanline" />
