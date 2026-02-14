@@ -46,9 +46,10 @@ WORLD COORDINATES:
 - TARGET BEACON: [${targetPos[0].toFixed(1)}, ${targetPos[2].toFixed(1)}]
 
 PLANNING PROTOCOL:
-1. REASONING: Analyze hazards.
-2. STRATEGY: Define curved path.
-3. OUTPUT: Exactly 6-8 waypoints [x, z].
+1. REASONING: Analyze hazards (craters, rocks, steep slopes).
+2. STRATEGY: Define a curved, jagged path. 
+3. NO STRAIGHT LINES: Strict requirement to navigate micro-relief and avoid boulders.
+4. OUTPUT: Exactly 12-16 waypoints [x, z] for high-fidelity navigation.
 
 LANGUAGE REQUIREMENT:
 - You MUST provide the 'reasoning' and 'quote' in the following language: ${language}.
@@ -59,7 +60,7 @@ PERSONALITY & QUOTE CONSTRAINTS:
 - FORBIDDEN TO MENTION: Neil Armstrong, "One small step", "Giant leap", or "Eagle has landed". Using these will count as a system malfunction.
 - ACT as a professional tactical scout navigator. Respond as if transmitting technical data to a rover pilot.
 - GENERATE a unique, short, technical quote about the local terrain gradients, regolith density, or basaltic hazards.
-- Sounds like: "Terrain gradient within tolerances. Navigating basaltic shelf to preserve motor torque." or "Sensor sweep confirms high boulder frequency. Adjusting vectors for 15-degree clearance."
+- Sounds like: "Basaltic ridge detected at vector 045. Jagged approach confirmed to maximize traction." or "Thermal bloom in regolith detected. Deviating from linear path to preserve motor integrity."
 
 JSON ONLY FORMAT:
 {
@@ -261,17 +262,39 @@ function generateFallbackRoute(startPos, targetPos) {
 let hCanvas = null;
 function heightmapToImage(hData) {
     if (!hData) return "";
+    // Target side 257x257 for optimal AI processing
+    const targetSide = 257;
     const side = Math.floor(Math.sqrt(hData.length));
+
     if (!hCanvas) hCanvas = document.createElement('canvas');
-    hCanvas.width = hCanvas.height = side;
+    hCanvas.width = hCanvas.height = targetSide;
     const ctx = hCanvas.getContext('2d');
-    const iData = ctx.createImageData(side, side);
-    let minH = Math.min(...hData), maxH = Math.max(...hData), r = maxH - minH || 1;
+
+    // Create temporary image data of original size
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = tempCanvas.height = side;
+    const tempCtx = tempCanvas.getContext('2d');
+    const iData = tempCtx.createImageData(side, side);
+
+    let minH = Infinity, maxH = -Infinity;
+    for (let i = 0; i < hData.length; i++) {
+        if (hData[i] < minH) minH = hData[i];
+        if (hData[i] > maxH) maxH = hData[i];
+    }
+    let r = maxH - minH || 1;
+
     for (let i = 0; i < hData.length; i++) {
         const val = Math.floor(((hData[i] - minH) / r) * 255);
-        iData.data[i * 4] = iData.data[i * 4 + 1] = iData.data[i * 4 + 2] = val; iData.data[i * 4 + 3] = 255;
+        iData.data[i * 4] = iData.data[i * 4 + 1] = iData.data[i * 4 + 2] = val;
+        iData.data[i * 4 + 3] = 255;
     }
-    ctx.putImageData(iData, 0, 0);
+    tempCtx.putImageData(iData, 0, 0);
+
+    // Scale and draw to main canvas
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, targetSide, targetSide);
+    ctx.drawImage(tempCanvas, 0, 0, side, side, 0, 0, targetSide, targetSide);
+
     return hCanvas.toDataURL('image/png').split(',')[1];
 }
 

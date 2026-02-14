@@ -128,6 +128,7 @@ export default function SimulationApp() {
     setIsAiPlanning(true);
     setWaypoints([]); // Clear visual IMMEDIATELY on intent
     setAiQuote("");
+    dispatch({ type: 'ADD_LOG', payload: { text: "AI ARCHITECT: SCANNING LUNAR TOPOLOGY...", type: 'info' } });
 
     try {
       const startPos = telemetryRef.current.position || [0, 0, 0];
@@ -148,9 +149,19 @@ export default function SimulationApp() {
         setWaypoints(result.waypoints);
         setAiQuote(result.quote);
         setCurrentWaypointIdx(0);
+
+        // Log AI Reasoning to Terminal
+        dispatch({ type: 'ADD_LOG', payload: { text: "AI ARCHITECT: STRATEGIC ROUTE COMMITTED.", type: 'info' } });
+        if (result.reasoning) {
+          dispatch({ type: 'ADD_LOG', payload: { text: `AI LOGIC: ${result.reasoning}`, type: 'system' } });
+        }
+        if (result.quote) {
+          dispatch({ type: 'ADD_LOG', payload: { text: `AI QUOTE: "${result.quote}"`, type: 'info' } });
+        }
       }
     } catch (e) {
       console.error("[AI] Strategic Planning Error:", e);
+      dispatch({ type: 'ADD_LOG', payload: { text: `AI ARCHITECT: CALCULATION FAILED - ${e.message}`, type: 'critical' } });
       lastPlannedSeed.current = null;
     } finally {
       setIsAiPlanning(false);
@@ -165,6 +176,34 @@ export default function SimulationApp() {
   // Monte Carlo state
   const [monteCarloTrajectories, setMonteCarloTrajectories] = useState(null);
   const [riskMetrics, setRiskMetrics] = useState({ sCVaR: 0, SMaR: 0 });
+
+  // V19: RISK MONITORING - Log to terminal on threshold crossing
+  const lastRiskLevels = useRef({ sCVaR: 0, SMaR: 3 }); // 0:safe, 1:warn, 2:critical | 3:comfortable, 2:caution, 1:danger
+  useEffect(() => {
+    if (riskMetrics.sCVaR === undefined || riskMetrics.SMaR === undefined) return;
+
+    // sCVaR Monitoring
+    let sLevel = 0;
+    if (riskMetrics.sCVaR > 60) sLevel = 2;
+    else if (riskMetrics.sCVaR > 30) sLevel = 1;
+
+    if (sLevel > lastRiskLevels.current.sCVaR) {
+      const msg = sLevel === 2 ? "ALERT: CRITICAL sCVaR DETECTED (>60)" : "WARNING: ELEVATED sCVaR DETECTED (>30)";
+      dispatch({ type: 'ADD_LOG', payload: { text: msg, type: sLevel === 2 ? 'critical' : 'warning' } });
+    }
+    lastRiskLevels.current.sCVaR = sLevel;
+
+    // SMaR Monitoring
+    let smLevel = 3;
+    if (riskMetrics.SMaR < 15) smLevel = 1;
+    else if (riskMetrics.SMaR < 35) smLevel = 2;
+
+    if (smLevel < lastRiskLevels.current.SMaR) {
+      const msg = smLevel === 1 ? "ALERT: EXTREME ROLLOVER RISK - SMaR < 15m" : "WARNING: STABILITY MARGIN REDUCED - SMaR < 35m";
+      dispatch({ type: 'ADD_LOG', payload: { text: msg, type: smLevel === 1 ? 'critical' : 'warning' } });
+    }
+    lastRiskLevels.current.SMaR = smLevel;
+  }, [riskMetrics.sCVaR, riskMetrics.SMaR]);
   const [dangerMap, setDangerMap] = useState(null);
   const mcWorkerRef = useRef(null);
 
@@ -176,9 +215,16 @@ export default function SimulationApp() {
     telemetryRef.current = telemetry;
   }, [telemetry]);
 
-  // Check for mobile
+  // Check for mobile (Dynamic)
   useEffect(() => {
-    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    const checkMobile = () => {
+      const isUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const isNarrow = window.innerWidth < 768;
+      setIsMobile(isUA || isNarrow);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   const startPos = useMemo(() => {

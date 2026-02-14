@@ -2,7 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "1.4.9";
+export const VERSION = "v0.7.4-alpha";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -50,21 +50,55 @@ export const getInitialState = () => ({
     chromaticAberration: false,
     apiKey: localStorage.getItem('pathfinder_api_key') || '',
     aiModel: 'gemini-3-flash',
+    logs: [{ id: Date.now(), text: "SYSTEM: INITIALIZING NAVIGATION STACK...", type: 'info' }],
+    terminalOpen: false,
 });
 
 function simulationReducer(state, action) {
     switch (action.type) {
+        case 'ADD_LOG':
+            const newLog = {
+                id: Date.now() + Math.random(),
+                text: action.payload.text,
+                type: action.payload.type || 'info', // 'info', 'warning', 'critical'
+                timestamp: new Date().toLocaleTimeString()
+            };
+            return {
+                ...state,
+                logs: [newLog, ...state.logs].slice(0, 50)
+            };
+        case 'CLEAR_LOGS':
+            return { ...state, logs: [] };
         case 'SET_LANGUAGE':
             return { ...state, language: action.payload };
         case 'TOGGLE_AUTOPILOT':
+            const isManual = state.driveMode === DRIVE_MODES.MANUAL;
+            const logText = isManual ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED";
+            const updatedLogs = [{
+                id: Date.now(),
+                text: logText,
+                type: isManual ? 'warning' : 'info',
+                timestamp: new Date().toLocaleTimeString()
+            }, ...state.logs].slice(0, 50);
             return {
                 ...state,
-                driveMode: state.driveMode === DRIVE_MODES.MANUAL ? DRIVE_MODES.AUTOPILOT : DRIVE_MODES.MANUAL,
+                driveMode: isManual ? DRIVE_MODES.AUTOPILOT : DRIVE_MODES.MANUAL,
+                logs: updatedLogs
             };
         case 'SET_DRIVE_MODE':
             return { ...state, driveMode: action.payload };
         case 'TOGGLE_NAV_OVERLAY':
-            return { ...state, navigationOverlay: !state.navigationOverlay };
+            const isOverlayOn = !state.navigationOverlay;
+            return {
+                ...state,
+                navigationOverlay: isOverlayOn,
+                logs: [{
+                    id: Date.now(),
+                    text: isOverlayOn ? "SYSTEM: MONTE CARLO OVERLAY ACTIVATED" : "SYSTEM: MONTE CARLO OVERLAY DEACTIVATED",
+                    type: 'info',
+                    timestamp: new Date().toLocaleTimeString()
+                }, ...state.logs].slice(0, 50)
+            };
         case 'SET_BRIGHTNESS':
             return { ...state, brightness: action.payload };
         case 'SET_SHADOW_CONTRAST':
@@ -74,24 +108,55 @@ function simulationReducer(state, action) {
         case 'UPDATE_TELEMETRY':
             return { ...state, ...action.payload };
         case 'SET_SIMULATION_STATE':
-            return { ...state, simulationState: action.payload.state, failReason: action.payload.reason || '' };
+            const simLog = action.payload.state === 'success'
+                ? "MISSION: SUCCESS - BEACON REACHED"
+                : `MISSION: FAILED - ${action.payload.reason?.toUpperCase() || 'UNKNOWN ERROR'}`;
+            return {
+                ...state,
+                simulationState: action.payload.state,
+                failReason: action.payload.reason || '',
+                logs: [{
+                    id: Date.now(),
+                    text: simLog,
+                    type: action.payload.state === 'success' ? 'info' : 'critical',
+                    timestamp: new Date().toLocaleTimeString()
+                }, ...state.logs].slice(0, 50)
+            };
         case 'RESET_SIMULATION':
             return {
                 ...getInitialState(),
                 language: state.language,
                 apiKey: state.apiKey,
+                brightness: state.brightness,
+                shadowContrast: state.shadowContrast,
+                chromaticAberration: state.chromaticAberration,
                 driveMode: DRIVE_MODES.MANUAL, // Force manual
                 navigationOverlay: false,      // Force overlay off
                 terrainSeed: state.terrainSeed, // Keeps the map
+                logs: [{
+                    id: Date.now(),
+                    text: "SYSTEM: RESTARTING MISSION...",
+                    type: 'info',
+                    timestamp: new Date().toLocaleTimeString()
+                }, ...state.logs].slice(0, 50)
             };
         case 'NEW_TERRAIN':
             return {
                 ...getInitialState(),
                 language: state.language,
                 apiKey: state.apiKey,
+                brightness: state.brightness,
+                shadowContrast: state.shadowContrast,
+                chromaticAberration: state.chromaticAberration,
                 driveMode: DRIVE_MODES.MANUAL,
                 navigationOverlay: false,
                 terrainSeed: Math.random() * 10000, // Changes the map
+                logs: [{
+                    id: Date.now(),
+                    text: "SYSTEM: LANDSCAPE GENERATED.",
+                    type: 'info',
+                    timestamp: new Date().toLocaleTimeString()
+                }]
             };
         case 'SET_MONTE_CARLO':
             return { ...state, monteCarloResults: action.payload };
@@ -101,7 +166,18 @@ function simulationReducer(state, action) {
             localStorage.setItem('pathfinder_api_key', action.payload);
             return { ...state, apiKey: action.payload };
         case 'SET_AI_MODEL':
-            return { ...state, aiModel: action.payload };
+            return {
+                ...state,
+                aiModel: action.payload,
+                logs: [{
+                    id: Date.now(),
+                    text: `SYSTEM: AI ARCHITECT SWITCHED TO [${action.payload.toUpperCase()}]`,
+                    type: 'info',
+                    timestamp: new Date().toLocaleTimeString()
+                }, ...state.logs].slice(0, 50)
+            };
+        case 'TOGGLE_TERMINAL':
+            return { ...state, terminalOpen: !state.terminalOpen };
         default:
             return state;
     }

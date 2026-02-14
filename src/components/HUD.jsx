@@ -1,12 +1,13 @@
 // components/HUD.jsx — Sci-Fi HUD overlay (NVIDIA Drive / SpaceX Dragon style)
 import React, { useState, useCallback, useRef } from 'react';
 import { STRINGS } from '../i18n';
-import { COLORS as C, WARNING_ANGLE, VERSION } from '../store';
+import { COLORS as C, WARNING_ANGLE, VERSION, useSimulationState } from '../store';
+import TerminalPanel from './TerminalPanel';
 
 // Corner bracket decorator component
-function CornerBrackets({ children, className = '', onClick }) {
+function CornerBrackets({ children, className = '', onClick, style }) {
     return (
-        <div className={`hud-panel ${className}`} onClick={onClick}>
+        <div className={`hud-panel ${className}`} onClick={onClick} style={style}>
             <span className="corner tl" />
             <span className="corner tr" />
             <span className="corner bl" />
@@ -26,7 +27,7 @@ function BatteryBar({ value }) {
 }
 
 // Telemetry panel (Top Left)
-function TelemetryPanel({ telemetry, lang }) {
+function TelemetryPanel({ telemetry, lang, style }) {
     const t = STRINGS[lang];
     const pitchVal = parseFloat(telemetry.pitch) || 0;
     const rollVal = parseFloat(telemetry.roll) || 0;
@@ -34,7 +35,7 @@ function TelemetryPanel({ telemetry, lang }) {
     const rollColor = Math.abs(rollVal) > WARNING_ANGLE ? C.CRITICAL_PATH : C.PRIMARY_INFO;
 
     return (
-        <CornerBrackets className="panel-telemetry">
+        <CornerBrackets className="panel-telemetry" style={style}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(0, 255, 255, 0.3)', paddingBottom: '5px', minHeight: '28px' }}>
                 <h2 className="panel-title" style={{ margin: 0, border: 'none', padding: 0 }}>{t.telemetry}</h2>
                 <div style={{ width: '30px' }}></div>
@@ -76,11 +77,11 @@ function TelemetryPanel({ telemetry, lang }) {
 }
 
 // Mission Control panel (Top Right)
-function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, telemetry }) {
+function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, telemetry, style }) {
     const t = STRINGS[lang];
 
     return (
-        <CornerBrackets className="panel-mission">
+        <CornerBrackets className="panel-mission" style={style}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(0, 255, 255, 0.3)', paddingBottom: '5px', minHeight: '28px' }}>
                 <h2 className="panel-title" style={{ margin: 0, border: 'none', padding: 0 }}>{t.missionControl}</h2>
                 <button
@@ -327,6 +328,7 @@ export default function HUD(props) {
         apiKey, onApiKeyChange, isAiOnline, aiQuote, navigationOverlay, onToggleNav, aiModel, onAiModelChange,
         isAiPlanning, isMcCalculating, onPlanRoute
     } = props;
+    const { terminalOpen } = useSimulationState();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     const quoteHeaders = {
@@ -335,16 +337,37 @@ export default function HUD(props) {
         UA: "[ШІ ПІДКЛЮЧЕНО] - СТРАТЕГІЧНА ЦИТАТА:"
     };
 
+    const hudShiftClass = (terminalOpen && !isMobile) ? 'terminal-visible' : '';
+
     return (
-        <div className="hud-overlay">
+        <div className={`hud-overlay ${hudShiftClass}`} style={{ pointerEvents: 'none' }}>
             <TopLogos />
             <TelemetryPanel telemetry={{ ...telemetry, sCVaR: riskMetrics?.sCVaR }} lang={language} />
-            <MissionPanel targetDistance={targetDistance} lang={language} elapsedTime={elapsedTime} onNewTerrain={onNewTerrain} onOpenSettings={() => setIsSettingsOpen(true)} telemetry={{ SMaR: riskMetrics?.SMaR }} />
+
+            <MissionPanel
+                targetDistance={targetDistance}
+                lang={language}
+                elapsedTime={elapsedTime}
+                onNewTerrain={onNewTerrain}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                telemetry={{ SMaR: riskMetrics?.SMaR }}
+            />
 
             <ControlPanel
-                driveMode={driveMode} lang={language} onSetDriveMode={onSetDriveMode} simulationState={simulationState} navigationOverlay={navigationOverlay} onToggleNav={onToggleNav}
-                onPlanRoute={onPlanRoute} isAiOnline={isAiOnline} isAiPlanning={isAiPlanning} isMcCalculating={isMcCalculating} aiQuote={aiQuote}
+                driveMode={driveMode}
+                lang={language}
+                onSetDriveMode={onSetDriveMode}
+                simulationState={simulationState}
+                navigationOverlay={navigationOverlay}
+                onToggleNav={onToggleNav}
+                onPlanRoute={onPlanRoute}
+                isAiOnline={isAiOnline}
+                isAiPlanning={isAiPlanning}
+                isMcCalculating={isMcCalculating}
+                aiQuote={aiQuote}
             />
+
+            <TerminalPanel />
 
             {(simulationState === 'success' || simulationState === 'gameover') && (
                 <OutcomeOverlay
@@ -358,7 +381,7 @@ export default function HUD(props) {
             )}
 
             {!isAiOnline && driveMode === 'autopilot' && (
-                <div style={{ position: 'absolute', top: '80px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(255, 0, 0, 0.3)', padding: '10px 20px', borderRadius: '5px', border: '1px solid #ff0000', color: '#fff', zIndex: 1000, backdropFilter: 'blur(5px)', fontFamily: 'monospace', fontSize: '14px' }}>
+                <div className="offline-warning-box">
                     <span style={{ fontWeight: 'bold' }}>⚠️ STRATEGIC OFFLINE:</span> AI KEY MISSING. USING HEURISTIC FALLBACK.
                 </div>
             )}

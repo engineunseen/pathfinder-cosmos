@@ -55,8 +55,27 @@ canvas {
   right: 0;
   bottom: 0;
   pointer-events: none;
-  z-index: 100;
+  z-index: 1100;
+  /* Higher than everything except specific modals */
   font-family: var(--font);
+}
+
+.offline-warning-box {
+  pointer-events: none;
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 0, 0, 0.3);
+  padding: 10px 20px;
+  border-radius: 5px;
+  border: 1px solid #ff0000;
+  color: #fff;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  font-family: monospace;
+  font-size: 14px;
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .hud-overlay>* {
@@ -75,6 +94,8 @@ canvas {
   letter-spacing: 0.5px;
   isolation: isolate;
   /* Ensure new stacking context for children */
+  z-index: 1010;
+  /* Above Terminal (1000) */
 }
 
 /* Corner bracket decorations */
@@ -136,6 +157,9 @@ canvas {
   top: 16px;
   left: 16px;
   min-width: 220px;
+  z-index: 1010;
+  /* Above Terminal */
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .telemetry-row {
@@ -182,6 +206,9 @@ canvas {
   right: 16px;
   min-width: 220px;
   text-align: right;
+  z-index: 1010;
+  /* Above Terminal */
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .panel-mission .telemetry-row {
@@ -195,10 +222,12 @@ canvas {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  min-width: 420px;
-  max-width: 90vw;
+  width: 420px;
   text-align: center;
   padding: 10px 24px;
+  z-index: 90;
+  /* Below Terminal */
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .ai-status {
@@ -335,7 +364,6 @@ canvas {
 }
 
 /* ---- AI INDICATOR ---- */
-/* ---- AI INDICATOR ---- */
 .ai-indicator {
   position: fixed;
   top: 280px;
@@ -438,6 +466,7 @@ canvas {
   background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.05) 50%, transparent);
   border-bottom: 1px solid rgba(0, 255, 255, 0.1);
   pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .logo-section {
@@ -518,8 +547,9 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   animation: modalFadeIn 0.3s ease;
+  transition: padding 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 @keyframes modalFadeIn {
@@ -590,8 +620,9 @@ canvas {
   justify-content: center;
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(6px);
-  z-index: 300;
+  z-index: 1500;
   animation: fadeIn 0.4s ease;
+  transition: padding 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 @keyframes fadeIn {
@@ -668,6 +699,8 @@ canvas {
   right: 0;
   height: 200px;
   pointer-events: none;
+  z-index: 90;
+  /* Below Terminal (1000) */
 }
 
 .mobile-controls>* {
@@ -725,20 +758,32 @@ canvas {
 
 .mobile-brake-btn {
   position: absolute;
-  bottom: 50px;
-  right: 120px;
+  bottom: 60px;
+  left: 170px;
   width: 60px;
   height: 60px;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 2px solid var(--red);
   background: rgba(255, 0, 85, 0.1);
   color: var(--red);
   font-family: var(--font);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   cursor: pointer;
   touch-action: none;
+  text-shadow: 0 0 5px var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 100;
+  /* Above joystick (which is part of mobile-controls at 90) */
+}
+
+.mobile-brake-btn:active {
+  background: rgba(255, 0, 85, 0.4);
+  box-shadow: 0 0 15px var(--red);
 }
 
 /* ---- SCANLINES EFFECT (via ::after pseudo-element) ---- */
@@ -771,17 +816,24 @@ canvas {
     left: 8px;
     min-width: 160px;
     font-size: 10px;
+    z-index: 1010;
+    /* Ensure on top in mobile */
   }
 
   .panel-mission {
     top: 8px;
     right: 8px;
     min-width: 140px;
+    z-index: 1010;
+    /* Ensure on top in mobile */
   }
 
   .panel-controls {
     bottom: 200px;
+    /* Above mobile controls zone */
     min-width: 280px;
+    z-index: 1010;
+    /* Ensure on top in mobile */
   }
 
   .controls-hint {
@@ -813,4 +865,20 @@ canvas {
   100% {
     transform: translate(0);
   }
+}
+
+/* ---- SHIFTED STATE (TERMINAL OPEN - DESKTOP) ---- */
+.hud-overlay.terminal-visible .panel-mission {
+  transform: translateX(-320px);
+}
+
+.hud-overlay.terminal-visible .panel-controls,
+.hud-overlay.terminal-visible .top-logos,
+.hud-overlay.terminal-visible .offline-warning-box {
+  transform: translateX(calc(-50% - 160px));
+}
+
+.hud-overlay.terminal-visible .modal-overlay,
+.hud-overlay.terminal-visible .game-over-overlay {
+  padding-right: 320px;
 }
