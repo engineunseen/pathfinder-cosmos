@@ -1,5 +1,5 @@
 // components/HUD.jsx — Sci-Fi HUD overlay (NVIDIA Drive / SpaceX Dragon style)
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, memo } from 'react';
 import { STRINGS } from '../i18n';
 import { COLORS as C, WARNING_ANGLE, VERSION, useSimulationState } from '../store';
 import TerminalPanel from './TerminalPanel';
@@ -127,25 +127,29 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
 
 // Bottom Control Panel
 function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, navigationOverlay, onToggleNav, onPlanRoute, isAiOnline, isAiPlanning, isMcCalculating, aiQuote }) {
+    const { terminalOpen } = useSimulationState();
     const t = STRINGS[lang];
-    const isDual = driveMode === 'autopilot' && navigationOverlay;
 
     return (
-        <CornerBrackets className="panel-controls">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(0, 255, 255, 0.3)', paddingBottom: '5px', minHeight: '28px' }}>
-                <h2 className="panel-title" style={{ margin: 0, border: 'none', padding: 0 }}>{t.navAssist}</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px' }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isAiOnline ? '#00FFFF' : '#FFBF00', boxShadow: `0 0 5px ${isAiOnline ? '#00FFFF' : '#FFBF00'}` }}></span>
-                    <span style={{ opacity: 0.7 }}>{isAiOnline ? 'ONLINE' : 'OFFLINE'}</span>
-                </div>
-            </div>
+        <CornerBrackets className="panel-controls" style={{
+            position: 'fixed',
+            bottom: '24px',
+            left: '50%',
+            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`,
+            width: '600px',
+            maxWidth: '90vw',
+            textAlign: 'center',
+            padding: '10px 24px',
+            zIndex: 90,
+            transition: 'transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)'
+        }}>
 
             {simulationState === 'running' && (
                 <>
                     <div className="ai-status" style={{ marginBottom: '12px', minHeight: '16px' }}>
                         {isAiPlanning ? (
                             <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.planning}</span>
-                        ) : isMcCalculating ? (
+                        ) : (navigationOverlay || driveMode === 'autopilot') ? (
                             <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.recalculating}</span>
                         ) : !navigationOverlay && driveMode === 'manual' ? (
                             <span className="ai-prompt" style={{ fontSize: '11px' }}>{t.navigatePrompt}</span>
@@ -154,7 +158,7 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, naviga
 
                     <div className="mode-selector" style={{ display: 'flex', gap: '10px' }}>
                         <button
-                            className={`mode-btn ${driveMode === 'autopilot' ? 'active-autopilot' : ''}`}
+                            className={`mode-btn ${driveMode === 'autopilot' ? 'active-autopilot pulse' : ''}`}
                             onClick={() => onSetDriveMode(driveMode === 'autopilot' ? 'manual' : 'autopilot')}
                             style={{ flex: 0.618 }}
                         >
@@ -189,25 +193,96 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, naviga
     );
 }
 
-// Outcome overlay
+// Outcome Overlay
 function OutcomeOverlay({ reason, lang, onRestart, onNewTerrain, safetyScore, elapsedTime }) {
     const t = STRINGS[lang];
+    const { totalCrashes } = useSimulationState();
     const isSuccess = reason === 'success';
+
     return (
-        <div className="game-over-overlay">
-            <CornerBrackets className="game-over-panel">
-                <h1 className={`game-over-title ${isSuccess ? 'success' : 'failure'}`}>{isSuccess ? 'MISSION SUCCESS' : 'MISSION TERMINATED'}</h1>
-                {!isSuccess && <p className="fail-reason">{reason === 'rollover' && 'CRITICAL ROLLOVER DETECTED'}{reason === 'stuck' && 'ROVER IMMOBILIZED'}{reason === 'damage' && 'POWER SOURCE EXHAUSTED'}</p>}
-
-                <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
-                    <div className="score-row"><span>{t.safetyScore}:</span><span style={{ color: C.SAFE_PATH }}>{safetyScore}</span></div>
-                    <div className="score-row"><span>{t.time}:</span><span style={{ color: C.PRIMARY_INFO }}>{elapsedTime.toFixed(1)}s</span></div>
+        <div className="outcome-overlay">
+            <CornerBrackets className="outcome-panel">
+                <h1 className={`outcome-title ${isSuccess ? 'success' : 'fail'}`}>
+                    {isSuccess ? 'MISSION SUCCESS' : 'MISSION TERMINATED'}
+                </h1>
+                <div className="outcome-details">
+                    <div className="detail-row"><span>{t.time}:</span> <span>{Math.floor(elapsedTime)}s</span></div>
+                    <div className="detail-row"><span>{t.safetyScore}:</span> <span>{safetyScore}/100</span></div>
+                    {!isSuccess && <div className="detail-row" style={{ color: '#FF0055' }}><span>STATUS:</span> <span>STABILITY BREACH - ROVER LOST</span></div>}
                 </div>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    <button className="hud-button" style={{ flex: 1 }} onClick={onNewTerrain}>{t.generateNewLandscape}</button>
+                </div>
+            </CornerBrackets>
+        </div>
+    );
+}
 
-                <div style={{ width: '100%' }}>
-                    <button className="hud-button" style={{ width: '100%', borderColor: C.ACCENT }} onClick={onNewTerrain}>
-                        <span className="btn-bracket">[</span>{t.restartMission}<span className="btn-bracket">]</span>
-                    </button>
+// V0.8.34: Lidar Visualization Panel
+function LidarPanel({ data, lang }) {
+    const t = STRINGS[lang];
+    // Data is a string like: "\n- 0°: 5m:[+0.1m] 10m:[-0.5m] ..."
+    // We'll parse it into a structured array
+    const lines = data.split('\n').filter(l => l.includes('°'));
+    const sectors = lines.map(line => {
+        const angle = line.match(/(\d+)°/)[1];
+        const m5 = line.match(/5m:\[([^\]]+)\]/)[1];
+        const m10 = line.match(/10m:\[([^\]]+)\]/)[1];
+        return { angle, m5, m10 };
+    });
+
+    return (
+        <div className="lidar-panel">
+            <CornerBrackets className="lidar-inner">
+                <div className="panel-title" style={{ fontSize: '8px', marginBottom: '15px' }}>{t.lidarScan}</div>
+                <div className="radar-container">
+                    <div className="radar-grid">
+                        <div className="radar-circle c10" />
+                        <div className="radar-circle c5" />
+                        <div className="radar-axis axis-h" />
+                        <div className="radar-axis axis-v" />
+                        <div className="radar-sweep" />
+                    </div>
+                    {sectors.map((s, i) => {
+                        const deg = parseInt(s.angle);
+                        const rad = (deg - 90) * (Math.PI / 180); // Adjust for CSS rotation
+                        const x = Math.cos(rad);
+                        const y = Math.sin(rad);
+
+                        const getIntensity = (val) => {
+                            if (val === 'VOID') return '#333';
+                            const v = parseFloat(val);
+                            if (Math.abs(v) > 2) return '#FF0055'; // Danger (Steep)
+                            if (Math.abs(v) > 0.8) return '#FFBF00'; // Warning (Slope)
+                            return '#00FF41'; // Safe
+                        };
+
+                        return (
+                            <React.Fragment key={s.angle}>
+                                {/* 5m point */}
+                                <div className="radar-point p5" style={{
+                                    left: `calc(50% + ${x * 25}%)`,
+                                    top: `calc(50% + ${y * 25}%)`,
+                                    background: getIntensity(s.m5)
+                                }}>
+                                    <span className="tooltip">{s.m5}</span>
+                                </div>
+                                {/* 10m point */}
+                                <div className="radar-point p10" style={{
+                                    left: `calc(50% + ${x * 45}%)`,
+                                    top: `calc(50% + ${y * 45}%)`,
+                                    background: getIntensity(s.m10)
+                                }}>
+                                    <span className="tooltip">{s.m10}</span>
+                                </div>
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
+                <div className="lidar-legend">
+                    <div className="legend-item"><div className="dot" style={{ background: '#00FF41' }} /> {t.safe}</div>
+                    <div className="legend-item"><div className="dot" style={{ background: '#FFBF00' }} /> {t.warning}</div>
+                    <div className="legend-item"><div className="dot" style={{ background: '#FF0055' }} /> {t.critical}</div>
                 </div>
             </CornerBrackets>
         </div>
@@ -215,8 +290,9 @@ function OutcomeOverlay({ reason, lang, onRestart, onNewTerrain, safetyScore, el
 }
 
 // Settings Modal
-function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle, apiKey, onApiKeyChange, aiModel, onAiModelChange }) {
+function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle, apiKey, onApiKeyChange, aiModel, onAiModelChange, waypointCount, onWaypointCountChange, onToggleCalibration }) {
     if (!isOpen) return null;
+    const { isCalibrationMode } = useSimulationState();
     const t = STRINGS[lang];
     const [localBrightness, setLocalBrightness] = React.useState(brightness || 1.2);
     React.useEffect(() => { setLocalBrightness(brightness || 1.2); }, [brightness]);
@@ -227,22 +303,97 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
         <div className="modal-overlay" onClick={onClose}>
             <CornerBrackets className="settings-panel" onClick={e => e.stopPropagation()}>
                 <h2 className="panel-title">{t.settings}</h2>
-                <div className="settings-row"><span className="label">BRIGHTNESS:</span><div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><input type="range" min="0.1" max="3.0" step="0.1" value={localBrightness} onChange={handleSliderChange} onPointerDownCapture={(e) => { e.stopPropagation(); }} style={{ width: '150px', accentColor: '#00FFFF', cursor: 'pointer', pointerEvents: 'auto' }} /><span style={{ color: '#00FFFF', fontSize: '0.8em', width: '30px' }}>{localBrightness.toFixed(1)}</span></div></div>
-                <div className="settings-row"><span className="label">SHADOWS:</span><div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><input type="range" min="0.0" max="1.0" step="0.05" value={shadowContrast || 0.5} onChange={(e) => onShadowChange(parseFloat(e.target.value))} onPointerDownCapture={(e) => { e.stopPropagation(); }} style={{ width: '150px', accentColor: '#00FFFF', cursor: 'pointer', pointerEvents: 'auto' }} /><span style={{ color: '#00FFFF', fontSize: '0.8em', width: '30px' }}>{(shadowContrast || 0.5).toFixed(2)}</span></div></div>
-                <div className="settings-row"><span className="label">LENS FX:</span><button className="hud-button" style={{ margin: 0, borderColor: chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.2)', color: chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.5)', minWidth: '60px' }} onClick={onChromaticToggle}>{chromaticAberration ? 'ON' : 'OFF'}</button></div>
-                <div style={{ marginTop: '15px', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid rgba(0, 255, 255, 0.2)' }}><div className="settings-row" style={{ display: 'block' }}><span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI MODEL (COST OPTIMIZED):</span><select value={apiKey && apiKey.startsWith('http') ? 'custom' : (aiModel || 'gemini-3-flash-preview')} onChange={(e) => onAiModelChange(e.target.value)} style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer' }}><option value="gemini-3-flash-preview">Gemini 3 Flash (Strategic Planning)</option><option value="cosmos-reasoning">NVIDIA Cosmos Reasoning (Advanced)</option></select></div><div className="settings-row" style={{ display: 'block' }}><span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{aiModel === 'cosmos-reasoning' ? 'COSMOS ENDPOINT URL:' : 'GEMINI API KEY:'}</span><input type="password" value={apiKey || ''} onChange={(e) => onApiKeyChange(e.target.value)} placeholder={aiModel === 'cosmos-reasoning' ? "https://..." : "Enter Key..."} style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} /></div></div>
-                <div style={{ marginTop: '10px', marginBottom: '20px' }}><button className="hud-button" style={{ width: '100%', borderColor: '#FFBF00', color: '#FFBF00', fontSize: '11px' }} onClick={handleReset}>RESET GRAPHICS</button></div>
-                <div className="settings-row"><span className="label">{t.language}:</span><div className="language-selector">{['EN', 'RU', 'UA'].map((l) => (<button key={l} className={`lang-btn ${lang === l ? 'active' : ''}`} onClick={() => onLanguageChange(l)}>{l}</button>))}</div></div>
+                <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>CALIBRATION:</span>
+                    <button
+                        className={`hud-button ${isCalibrationMode ? 'active' : ''}`}
+                        style={{
+                            width: '100%',
+                            margin: 0,
+                            borderColor: isCalibrationMode ? '#FFBF00' : 'rgba(255, 255, 255, 0.2)',
+                            color: isCalibrationMode ? '#FFBF00' : 'rgba(255, 255, 255, 0.5)'
+                        }}
+                        onClick={() => { onToggleCalibration(); onClose(); }}
+                    >
+                        {isCalibrationMode ? "EXIT CALIBRATION (RETURN TO MOON)" : "ENTER CALIBRATION (FLAT PLANE)"}
+                    </button>
+                    <span style={{ fontSize: '9px', opacity: 0.6, marginTop: '4px', display: 'block' }}>
+                        * Resets mission on an ideal 0-height surface for navigation testing.
+                    </span>
+                </div>
+                <div className="settings-row">
+                    <span className="label">{t.brightness}:</span>
+                    <div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input type="range" min="0.1" max="3.0" step="0.1" value={localBrightness} onChange={handleSliderChange} onPointerDownCapture={(e) => { e.stopPropagation(); }} style={{ width: '150px', accentColor: '#00FFFF', cursor: 'pointer', pointerEvents: 'auto' }} />
+                        <span style={{ color: '#00FFFF', fontSize: '0.8em', width: '30px' }}>{localBrightness.toFixed(1)}</span>
+                    </div>
+                </div>
+                <div className="settings-row">
+                    <span className="label">{t.shadows}:</span>
+                    <div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input type="range" min="0.0" max="1.0" step="0.05" value={shadowContrast || 0.5} onChange={(e) => onShadowChange(parseFloat(e.target.value))} onPointerDownCapture={(e) => { e.stopPropagation(); }} style={{ width: '150px', accentColor: '#00FFFF', cursor: 'pointer', pointerEvents: 'auto' }} />
+                        <span style={{ color: '#00FFFF', fontSize: '0.8em', width: '30px' }}>{(shadowContrast || 0.5).toFixed(2)}</span>
+                    </div>
+                </div>
+                <div className="settings-row">
+                    <span className="label">{t.lensFx}:</span>
+                    <button className="hud-button" style={{ margin: 0, borderColor: chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.2)', color: chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.5)', minWidth: '60px' }} onClick={onChromaticToggle}>{chromaticAberration ? 'ON' : 'OFF'}</button>
+                </div>
+                <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.waypointResolution}:</span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {[7, 15, 25].map(cnt => (
+                            <button
+                                key={cnt}
+                                className={`hud-button ${waypointCount === cnt ? 'active' : ''}`}
+                                style={{
+                                    flex: 1,
+                                    margin: 0,
+                                    fontSize: '10px'
+                                }}
+                                onClick={() => onWaypointCountChange(cnt)}
+                            >
+                                {cnt === 7 ? `${t.low} (7)` : cnt === 15 ? `${t.med} (15)` : `${t.ultra} (25)`}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.aiModelIdentity}:</span>
+                    <select value={apiKey && apiKey.startsWith('http') ? 'custom' : (aiModel || 'gemini-3-flash-preview')} onChange={(e) => onAiModelChange(e.target.value)} style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer' }}>
+                        <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                        <option value="cosmos-reasoning">NVIDIA Cosmos</option>
+                    </select>
+                </div>
+                <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>
+                        {aiModel === 'cosmos-reasoning' ? `${t.cosmosEndpoint}:` : `${t.geminiApiKey}:`}
+                    </span>
+                    <input type="password" value={apiKey || ''} onChange={(e) => onApiKeyChange(e.target.value)} placeholder={aiModel === 'cosmos-reasoning' ? "https://..." : "Enter Key..."} style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
+                </div>
+                <div style={{ marginTop: '10px', marginBottom: '20px' }}>
+                    <button className="hud-button" style={{ width: '100%', borderColor: '#FFBF00', color: '#FFBF00', fontSize: '11px' }} onClick={handleReset}>{t.resetGraphics}</button>
+                </div>
+                <div className="settings-row">
+                    <span className="label">{t.language}:</span>
+                    <div className="language-selector">{['EN', 'RU', 'UA'].map((l) => (<button key={l} className={`lang-btn ${lang === l ? 'active' : ''}`} onClick={() => onLanguageChange(l)}>{l}</button>))}</div>
+                </div>
                 <button className="hud-button close-btn" onClick={onClose}><span className="btn-bracket">[</span>{t.close}<span className="btn-bracket">]</span></button>
             </CornerBrackets >
         </div >
     );
 }
 
-function TopLogos() {
+function TopLogos({ aiModel }) {
+    const { terminalOpen } = useSimulationState();
+    const isGemini = aiModel && (aiModel.includes('gemini') || aiModel === 'gemini-3-flash-preview');
+    const partnerLogo = isGemini ? "/gemini-color.svg" : "/Nvidia_logo_.svg";
+
     return (
-        <div className="top-logos">
-            <div className="logo-section"><img src="/Nvidia_logo_.svg" alt="NVIDIA" style={{ height: '48px' }} /></div>
+        <div className="top-logos" style={{
+            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`
+        }}>
+            <div className="logo-section"><img src={partnerLogo} alt="Partner" style={{ height: isGemini ? '56px' : '51px' }} /></div>
             <div className="logo-divider" /><div className="logo-section"><img src="/Unseen_logo.svg" alt="UNSEEN" style={{ height: '54px' }} /></div>
         </div>
     );
@@ -326,7 +477,8 @@ export default function HUD(props) {
         telemetry, targetDistance, driveMode, simulationState, failReason, safetyScore, elapsedTime, language, isMobile, onSetDriveMode, onNewTerrain, onRestart,
         onLanguageChange, onMobileInput, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle, riskMetrics,
         apiKey, onApiKeyChange, isAiOnline, aiQuote, navigationOverlay, onToggleNav, aiModel, onAiModelChange,
-        isAiPlanning, isMcCalculating, onPlanRoute
+        isAiPlanning, isMcCalculating, onPlanRoute,
+        lidarScan, waypointCount, onWaypointCountChange, onToggleCalibration
     } = props;
     const { terminalOpen } = useSimulationState();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -341,7 +493,7 @@ export default function HUD(props) {
 
     return (
         <div className={`hud-overlay ${hudShiftClass}`} style={{ pointerEvents: 'none' }}>
-            <TopLogos />
+            <TopLogos aiModel={aiModel} />
             <TelemetryPanel telemetry={{ ...telemetry, sCVaR: riskMetrics?.sCVaR }} lang={language} />
 
             <MissionPanel
@@ -390,7 +542,9 @@ export default function HUD(props) {
                 <MobileControls onInputChange={onMobileInput} onPlanRoute={onPlanRoute} />
             )}
 
-            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} lang={language} onLanguageChange={onLanguageChange} brightness={brightness} onBrightnessChange={onBrightnessChange} shadowContrast={shadowContrast} onShadowChange={onShadowChange} chromaticAberration={chromaticAberration} onChromaticToggle={onChromaticToggle} apiKey={apiKey} onApiKeyChange={onApiKeyChange} aiModel={aiModel || 'gemini-3-flash'} onAiModelChange={onAiModelChange} />
+            {lidarScan && <LidarPanel data={lidarScan} lang={language} />}
+
+            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} lang={language} onLanguageChange={onLanguageChange} brightness={brightness} onBrightnessChange={onBrightnessChange} shadowContrast={shadowContrast} onShadowChange={onShadowChange} chromaticAberration={chromaticAberration} onChromaticToggle={onChromaticToggle} apiKey={apiKey} onApiKeyChange={onApiKeyChange} aiModel={aiModel || 'gemini-3-flash'} onAiModelChange={onAiModelChange} waypointCount={waypointCount} onWaypointCountChange={onWaypointCountChange} onToggleCalibration={onToggleCalibration} />
 
             <div style={{ position: 'absolute', bottom: '5px', right: '10px', color: '#888888', fontSize: '12px', fontWeight: 'bold', fontFamily: 'monospace', pointerEvents: 'none' }}>{VERSION}</div>
         </div>

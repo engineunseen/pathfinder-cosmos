@@ -1,342 +1,235 @@
-// aiNavigator.js — AI Navigation System for Unseen Pathfinder
-// UPGRADED TO GEMINI 3.0 MODELS & PHYSICS-AWARE REASONING
+// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v0.9.38)
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import * as THREE from 'three';
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
 
+const f1 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(1) : '0.0');
+const f2 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(2) : '0.00');
+
 // ============================================================
-// LEVEL 1: STRATEGIC PLANNER
+// LEVEL 1: STRATEGIC PLANNER (Astro-Core Architecture)
 // ============================================================
 
-const ARCHITECT_PROMPT_TEMPLATE = (language, terrainSize, startPos, targetPos, timestamp) => `You are the Strategic Planning AI for the Unseen Pathfinder Mission. [ID: ${timestamp}]
-Your task is to analyze the attached Lunar Heightmap and plan a SAFE route for the rover.
+export async function planStrategicRoute(apiKey, heightData, startPos, targetPos, terrainSize, waypointCount, model = 'gemini-3-pro-preview', language = 'EN') {
+    if (!apiKey) return { waypoints: [], quote: "FATAL: Navigation SDK Offline.", reasoning: "CRITICAL: Mission Architect cannot initialize.", isAi: false };
+
+    const fullDataUrl = heightmapToImage(heightData);
+    const base64Image = fullDataUrl.split(',')[1];
+    const halfSize = terrainSize / 2;
+
+    const textPrompt = `You are the STRATEGIC ARCHITECT (Route Planning) & SCIENTIFIC SPECIALIST (Astro-Core).
+
+### 1. STRATEGIC ARCHITECT
+Goal: Analyze 257x257 grayscale heightmap and generate a physics-safe trajectory.
 
 MAP SEMANTICS:
-- The image is a Top-Down Grayscale Heightmap of a 200m x 200m area.
+- Grayscale Heightmap of 200m x 200m area.
 - BRIGHTER pixels = Higher Elevation (Craters rims, basaltic ridges).
 - DARKER pixels = Lower Elevation (Cater floors, valleys).
-- VERY DARK small spots = Hazardous rocks and boulders.
 
 WORLD COORDINATES:
-- Center: [0, 0]. Size: ${terrainSize}m. Bounds: [-${terrainSize / 2}, ${terrainSize / 2}].
-- START: [${startPos[0].toFixed(1)}, ${startPos[2].toFixed(1)}]
-- TARGET BEACON: [${targetPos[0].toFixed(1)}, ${targetPos[2].toFixed(1)}]
+- Center: [0, 0]. Size: ${terrainSize}m. Bounds: [-${halfSize}, ${halfSize}].
+- START: [${f1(startPos[0])}, ${f1(startPos[2])}]
+- TARGET BEACON: [${f1(targetPos[0])}, ${f1(targetPos[2])}]
 
-MISSION LOGIC & JSON REQUIREMENTS:
-1. STRATEGIC ANALYSIS: You MUST conduct a deep technical analysis of the grayscale heightmap. Identify specific topographic hazards (crater rims, basaltic ridges, boulder fields).
-2. TRAJECTORY LOGIC: You MUST explain exactly why your path deviates from the direct line. Detail the physics of 'traction vs slope' and how you are navigating micro-relief.
-3. NO LIMITS: Write as much as needed for a professional mission architect report. The mission control terminal has scrolling enabled.
-4. JSON OUTPUT FORMAT: Strictly valid JSON only.
+MISSION LOGIC:
+1. STRATEGIC ANALYSIS: Conduct a deep technical analysis of regolith density and slope variance. 
+2. TRAJECTORY LOGIC: Explain path deviations based on traction vs. gradient physics. 
+3. OUTPUT FORMAT: Strictly valid JSON. Plan exactly ${waypointCount} waypoints.
+
+### 2. SCIENTIFIC SPECIALIST (Astronomy)
+Goal: Provide a single, unique, mind-blowing astronomical quote or status alert to inspire the crew.
 
 JSON SCHEMA:
 {
   "waypoints": [[x, z], ...], 
-  "reasoning": "[Comprehensive mission architect report. Multi-paragraph. Detailed topography analysis, physics constraints, and pathfinding logic. Refer to specific sectors or hazards.]",
-  "quote": "[A mission-appropriate scientific quote or status alert]"
+  "reasoning": "[Detailed technical topography analysis]",
+  "quote": "[A mission-appropriate scientific quote on astronomy/astrophysics]"
 }
-
-CONSTRAINTS:
-- FORBIDDEN TO MENTION: Neil Armstrong, "One small step", "Giant leap", or "Eagle has landed".
-- PERSONALITY: High-level Mission Architect. Technically dense. Aggressive safety margins. Use terms like 'regolith', 'basaltic', 'thermal bloom', 'gradient variance', 'isostatic balance'.
-- LANGUAGE: Respond in: ${language}.
 `;
 
-export async function planStrategicRoute(apiKey, heightmapData, startPos, targetPos, terrainSize, aiModel = 'gemini-3-flash-preview', language = 'EN') {
-    let actualKey = "";
-    if (typeof apiKey === 'string') actualKey = apiKey.trim();
-    else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
+    try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const geminiModel = genAI.getGenerativeModel({
+            model: model,
+            generationConfig: { temperature: 0.8, maxOutputTokens: 2048 }
+        });
 
-    if (!actualKey || actualKey === "" || actualKey === "undefined") {
-        return { waypoints: [], quote: "FATAL: Navigation SDK Offline. No API Key.", reasoning: "CRITICAL: Mission Architect cannot initialize without authorization.", isAi: false };
+        const result = await geminiModel.generateContent([
+            textPrompt,
+            { inlineData: { data: base64Image, mimeType: "image/png" } }
+        ]);
+
+        const text = result.response.text();
+        return parseResponse(text, startPos, targetPos, terrainSize);
+    } catch (err) {
+        return { waypoints: [], quote: `FATAL: AI NAVIGATOR FAILURE [${err.message}]`, reasoning: "Mission Aborted: Critical failure in strategic calculation stack.", isAi: false };
     }
+}
 
-    const activeModel = (aiModel.includes('pro'))
-        ? "gemini-3-pro-preview"
-        : "gemini-3-flash-preview";
+// ============================================================
+// LEVEL 2: TACTICAL AUTOPILOT (Local Space Transform v0.9.37)
+// ============================================================
+
+export async function getAutopilotCommand(apiKey, state, aiModel = 'gemini-3-flash-preview') {
+    const position = state.position || [0, 0, 0];
+    const velocity = state.velocity || [0, 0, 0];
+    const rotation = state.rotation || [0, 0, 0];
+    const { terrainData, relBearing, targetDistance } = state;
+
+    const lidarSweep = getLidarData(position, rotation, terrainData);
+    const distToBoundary = terrainData ? (terrainData.size / 2) - Math.max(Math.abs(position[0]), Math.abs(position[2])) : 100;
+    const boundaryWarning = distToBoundary < 15 ? `!!! CRITICAL: MAP BOUNDARY AT ${f1(distToBoundary)}m !!!` : "Clear";
+
+    const textPrompt = `You are the CYBER-PILOT of UNSEEN-1 (150kg, 6-wheel Lunar Rover).
+    
+PHYSICAL CAPABILITIES:
+- High inertia, slow steering response. Rapid counter-steering causes instability.
+- Independent motors: Reverse is possible but slow.
+    
+KINETIC CONTEXT:
+- ANTICIPATED BEARING: ${f1(relBearing)}° (Target location in future-space)
+- BEACON DISTANCE: ${f1(targetDistance)}m
+- CURRENT SPEED: ${f1(new THREE.Vector3(...velocity).length() * 3.6)} km/h
+- LIDAR: ${lidarSweep}
+- BOUNDARY: ${boundaryWarning}
+
+MISSION DIRECTIVES:
+1. SURVIVAL FIRST: If LIDAR shows obstacle < 5m, you MUST maneuver/reverse regardless of target.
+2. BEARING SENSITIVITY: Near target (<15m), bearing angles become highly sensitive/noisy due to latency. Prioritize consistent forward momentum and small steering adjustments. 
+3. MOMENTUM MANAGEMENT: Do not trigger REVERSE (-0.5) just because of bearing jitter. Only use it for deliberate repositioning if target is clearly missed or blocked.
+
+JSON ONLY: {"steer": -1 to 1, "throttle": -1 to 1, "reasoning": "string"}`;
 
     try {
-        const imageBase64 = heightmapToImage(heightmapData);
-        const timestamp = Date.now();
-        const textPrompt = ARCHITECT_PROMPT_TEMPLATE(language, terrainSize, startPos, targetPos, timestamp);
-
-        const genAI = new GoogleGenerativeAI(actualKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
-            model: activeModel,
+            model: aiModel,
             generationConfig: {
-                temperature: 0.85,
-                maxOutputTokens: 4096
+                temperature: 0.1,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "object",
+                    properties: {
+                        steer: { type: "number" },
+                        throttle: { type: "number" },
+                        reasoning: { type: "string" }
+                    },
+                    required: ["steer", "throttle", "reasoning"]
+                }
             }
         });
 
-        const result = await model.generateContent([
-            textPrompt,
-            { inlineData: { data: imageBase64, mimeType: "image/png" } }
-        ]);
-
-        const response = await result.response;
-        const text = response.text();
-        return parseResponse(text, startPos, targetPos, terrainSize);
-
-    } catch (err) {
-        console.error('AI Navigator SDK Error:', err);
-        try {
-            return await planStrategicRouteFetch(actualKey, heightmapData, startPos, targetPos, terrainSize, activeModel, language);
-        } catch (fetchErr) {
-            return { waypoints: [], quote: `FATAL: AI NAVIGATOR FAILURE [${err.message}]`, reasoning: "Mission Aborted: Critical failure in strategic calculation stack.", isAi: false };
-        }
-    }
-}
-
-async function planStrategicRouteFetch(key, heightmapData, startPos, targetPos, terrainSize, modelId, language) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
-    const imageBase64 = heightmapToImage(heightmapData);
-    const timestamp = Date.now();
-    const textPrompt = ARCHITECT_PROMPT_TEMPLATE(language, terrainSize, startPos, targetPos, timestamp);
-
-    const payload = {
-        contents: [{
-            parts: [
-                { text: textPrompt },
-                { inline_data: { mime_type: "image/png", data: imageBase64 } }
-            ]
-        }],
-        generationConfig: { temperature: 0.85, maxOutputTokens: 4096 }
-    };
-    const response = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`REST API Error: ${response.status} - ${errorData.error?.message || response.statusText}`);
-    }
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return parseResponse(text, startPos, targetPos, terrainSize);
-}
-
-// ============================================================
-// LEVEL 1.1: SCIENTIFIC SPECIALIST (THE SCIENCE CORE)
-// ============================================================
-
-export async function getScientificSpecialistReport(apiKey, language = 'EN') {
-    let actualKey = "";
-    if (typeof apiKey === 'string') actualKey = apiKey.trim();
-    else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
-
-    if (!actualKey) return { quote: "PHYSICS CORE OFFLINE.", isAi: false };
-
-    const textPrompt = `You are the Physical Specialist for the Unseen Pathfinder Mission.
-Your task is to provide a single, unique, technically dense scientific quote or status alert about the lunar environment.
-
-TECHNICAL CONSTRAINTS:
-- Use terms like: 'regolith friction', 'isostatic balance', 'thermal gradient', 'basaltic opacity', 'low-gravity traction'.
-- AVOID: Historical clichés, Armstrong, or poetic metaphors.
-- FOCUS: Pure physics and geological observations.
-- LANGUAGE: ${language}.
-`;
-
-    try {
-        const genAI = new GoogleGenerativeAI(actualKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-        const result = await model.generateContent(textPrompt);
-        const text = result.response.text().replace(/"/g, '').trim();
-        return { quote: text, isAi: true };
-    } catch (e) {
-        return { quote: "DATA STREAM CORRUPTED.", isAi: false };
-    }
-}
-
-const FACT_BANK = [
-    "A day on Venus is longer than its year; the planet spins backward relative to most peers.",
-    "Lunar gravity is approximately 16.2% of Earth's, significantly reducing rover traction requirements.",
-    "Mars iron oxide (rust) creates its red hue, but its sunsets appear blue to the human eye.",
-    "Neutron star material is so dense that a teaspoon would weigh billions of tons.",
-    "The Milky Way galaxy smells of rum and raspberries due to ethyl formate in star-forming clouds.",
-    "Space is not a perfect vacuum; it contains low-density plasma and electromagnetic vibrations.",
-    "In a vacuum, two pieces of the same metal will stick together permanently via cold welding.",
-    "The Moon is lemon-shaped, not perfectly round, due to tidal forces during its formation.",
-    "Saturn's hexagon is a persistent cloud pattern at the north pole, wider than two Earths.",
-    "Jupiter's Great Red Spot is a high-pressure storm that has raged for at least 350 years.",
-    "Olympus Mons on Mars is the solar system's tallest volcano, three times the height of Everest.",
-    "Titan, Saturn's moon, is the only known moon with a dense atmosphere and liquid methane lakes.",
-    "Mercury's core accounts for 85% of its radius, suggesting a violent impact in its early history.",
-    "Total solar eclipses are a cosmic coincidence; the Sun is 400x larger but 400x farther than the Moon.",
-    "Neptune's winds are the fastest in the solar system, reaching speeds of 2,100 km/h.",
-    "Diamonds may rain deep within the atmospheres of Uranus and Neptune due to extreme pressure.",
-    "Regolith is the layer of loose, heterogeneous superficial deposits covering solid rock on the Moon.",
-    "Basaltic plains comprise approximately 17% of the lunar surface, forming the 'maria' regions.",
-    "The Lunar South Pole-Aitken basin is one of the largest, deepest, and oldest impact craters.",
-    "Vacuum-stable regolith poses significant abrasive risk to rover joint seals and optics.",
-    "Thermal variance on the lunar surface ranges from 127°C in sunlight to -173°C in shadow.",
-    "Sunsets on Mars are blue due to dust particles scattering shorter wavelengths of light.",
-    "Gamma-ray bursts can release more energy in 10 seconds than our Sun will in its entire lifetime.",
-    "The Moon's exosphere is extremely thin, composed mainly of helium, neon, and argon.",
-    "Mascons are regions of the Moon's crust that contain excessive positive gravity anomalies."
-];
-
-function sanitizeAndEnhanceQuote(rawQuote) {
-    const forbidden = [
-        "small step", "giant leap", "armstrong", "mankind", "eagle has landed",
-        "poetic", "starry night", "fine and powdery", "pick it up", "with my toe",
-        "surface is fine", "magnificent desolation", "tranquility base",
-        "magnificent desolation", "one small step", "for a man", "humanity"
-    ];
-    const normalized = (rawQuote || "").toLowerCase();
-
-    // Check for cliches
-    for (const word of forbidden) {
-        if (normalized.includes(word)) {
-            console.warn(`[AI] Historic Cliche detected: "${word}". Replacing with Fact Bank.`);
-            return FACT_BANK[Math.floor(Math.random() * FACT_BANK.length)];
-        }
-    }
-
-    // Default or empty fallback
-    if (normalized.trim().length < 5) {
-        return FACT_BANK[Math.floor(Math.random() * FACT_BANK.length)];
-    }
-
-    return rawQuote;
-}
-
-function parseResponse(text, startPos, targetPos, terrainSize) {
-    console.log("[AI ARCHITECT] Raw Response Received:", text);
-
-    // Robust JSON extraction
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        try {
-            const cleanJson = jsonMatch[0].replace(/```json|```/g, '').trim();
-            const parsed = JSON.parse(cleanJson);
-
-            const halfSize = terrainSize / 2;
-            const rawWaypoints = (parsed.waypoints || []);
-            const validWaypoints = rawWaypoints.map(wp => [
-                Math.max(-halfSize, Math.min(halfSize, wp[0])),
-                Math.max(-halfSize, Math.min(halfSize, wp[1]))
-            ]);
-
-            return {
-                waypoints: validWaypoints.length > 0 ? validWaypoints : generateFallbackRoute(startPos, targetPos),
-                quote: sanitizeAndEnhanceQuote(parsed.quote),
-                reasoning: parsed.reasoning || "Analysis complete but no descriptive reasoning provided.",
-                isAi: true
-            };
-        } catch (e) {
-            console.error("[AI Navigator] JSON Parse Error. Raw text:", text);
-        }
-    }
-
-    // Total Transparency Fallback: Return raw text as reasoning so the user can see it
-    return {
-        waypoints: [],
-        quote: "CRITICAL: Response Format Violation.",
-        reasoning: `The AI Architect failed to return valid JSON. Potential data corruption or safety filter block.\n\nRAW TELEMETRY DATA RECEIVED:\n------------------------\n${text || "[EMPTY RESPONSE]"}\n------------------------`,
-        isAi: false
-    };
-}
-
-// ============================================================
-// LEVEL 2: TACTICAL AUTOPILOT
-// ============================================================
-
-export async function getAutopilotCommand(apiKey, state, aiModel = 'gemini-3-flash') {
-    let actualKey = "";
-    if (typeof apiKey === 'string') actualKey = apiKey.trim();
-    else if (apiKey && typeof apiKey.apiKey === 'string') actualKey = apiKey.apiKey.trim();
-
-    const activeModel = (aiModel === 'gemini-3-pro' || aiModel === 'gemini-1.5-pro') ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
-    const { position, currentWaypoint, distToWaypoint } = state;
-
-    if (distToWaypoint < 5) return { steer: 0, throttle: 0.3, advanceWaypoint: true };
-    if (!actualKey || actualKey === "undefined") return getHeuristicCommand(state);
-
-    try {
-        const genAI = new GoogleGenerativeAI(actualKey);
-        const model = genAI.getGenerativeModel({
-            model: activeModel,
-            generationConfig: { temperature: 0.4, maxOutputTokens: 256 }
-        });
-        const textPrompt = `Rover autopilot. JSON {"steer": X, "throttle": Y}. STATE: Pos[${position[0].toFixed(1)}, ${position[2].toFixed(1)}], Target[${currentWaypoint[0].toFixed(1)}, ${currentWaypoint[1].toFixed(1)}]`;
         const result = await model.generateContent(textPrompt);
         return parseAutopilotResponse(result.response.text());
     } catch (err) {
-        return getHeuristicCommand(state);
+        return { steer: 0, throttle: 0, reasoning: `AI_PIPELINE_STALLED: ${err.message}` };
     }
 }
 
 function parseAutopilotResponse(text) {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        try {
-            const cmd = JSON.parse(jsonMatch[0].replace(/```json|```/g, ''));
-            return { steer: Math.max(-1, Math.min(1, cmd.steer || 0)), throttle: Math.max(0, Math.min(1, cmd.throttle || 0.3)) };
-        } catch (e) { }
-    }
-    return { steer: 0, throttle: 0.15 };
+    let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    try {
+        const firstOpen = cleanText.indexOf('{');
+        const lastClose = cleanText.lastIndexOf('}');
+        if (firstOpen !== -1 && lastClose !== -1) {
+            const candidate = cleanText.substring(firstOpen, lastClose + 1);
+            return validateCmd(JSON.parse(candidate));
+        }
+    } catch (e) { /* Fallback handled */ }
+    return { steer: 0, throttle: 0, reasoning: "PARSE_ERROR" };
 }
 
-function getHeuristicCommand(state) {
-    const { position, rotation, currentWaypoint, SMaR, sCVaR } = state;
-    const dx = currentWaypoint[0] - position[0];
-    const dz = currentWaypoint[1] - position[2];
-    const targetAngle = Math.atan2(dx, dz);
-    let angleDiff = targetAngle - rotation[1];
-    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-    let throttle = 0.6;
-    if (SMaR < 25) throttle *= 0.5;
-    if (sCVaR > 50) throttle *= 0.3;
-    return { steer: Math.max(-1, Math.min(1, angleDiff * 2)), throttle: Math.max(0.15, throttle) };
+function validateCmd(cmd) {
+    const steer = typeof cmd.steer === 'number' && !isNaN(cmd.steer) ? cmd.steer : 0;
+    const throttle = typeof cmd.throttle === 'number' && !isNaN(cmd.throttle) ? cmd.throttle : 0;
+    return {
+        steer: Math.max(-1, Math.min(1, steer)),
+        throttle: Math.max(-1, Math.min(1, throttle)),
+        reasoning: cmd.reasoning || "Moving."
+    };
 }
 
 // ============================================================
-// UTILS
+// UTILS & IMAGE ENGINE (RESTORED QUALITY)
 // ============================================================
 
-function generateFallbackRoute(startPos, targetPos) {
-    const [sx, sz, tx, tz] = [startPos[0], startPos[2], targetPos[0], targetPos[2]];
-    return [[sx, sz], [sx + (tx - sx) * 0.5, sz + (tz - sz) * 0.5], [tx, tz]];
+export function getLidarData(position, rotation, terrainData) {
+    if (!position || !rotation || !terrainData || !terrainData.heightmap) return "OFFLINE";
+    const directions = [0, 90, 180, 270];
+    let sweep = "";
+    directions.forEach(deg => {
+        const rad = (deg * Math.PI) / 180 + rotation[1];
+        const dist = 10;
+        const x = position[0] + Math.sin(rad) * dist;
+        const z = position[2] - Math.cos(rad) * dist;
+        const halfSize = terrainData.size / 2;
+        const u = (x + halfSize) / terrainData.size;
+        const v = (z + halfSize) / terrainData.size;
+        if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+            const idx = Math.floor(v * 256) * 257 + Math.floor(u * 256);
+            const h = terrainData.heightmap[idx] * (terrainData.maxHeight || 40);
+            sweep += `${deg}°:${f1(h - position[1])}m `;
+        } else sweep += `${deg}°:WALL `;
+    });
+    return sweep;
 }
 
-let hCanvas = null;
+export let hCanvas = null;
 export function heightmapToImage(hData) {
-    if (!hData) return "";
-    // Target side 257x257 for optimal AI processing
+    const data = hData.heightmap || hData.heightData || hData;
+    if (!data || !data.length) return "";
+
+    const side = Math.sqrt(data.length);
     const targetSide = 257;
-    const side = Math.floor(Math.sqrt(hData.length));
 
     if (!hCanvas) hCanvas = document.createElement('canvas');
     hCanvas.width = hCanvas.height = targetSide;
     const ctx = hCanvas.getContext('2d');
 
-    // Create temporary image data of original size
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = tempCanvas.height = side;
     const tempCtx = tempCanvas.getContext('2d');
     const iData = tempCtx.createImageData(side, side);
 
+    // RESTORED NORMALIZATION: Find min/max for full grayscale range
     let minH = Infinity, maxH = -Infinity;
-    for (let i = 0; i < hData.length; i++) {
-        if (hData[i] < minH) minH = hData[i];
-        if (hData[i] > maxH) maxH = hData[i];
+    for (let i = 0; i < data.length; i++) {
+        if (data[i] < minH) minH = data[i];
+        if (data[i] > maxH) maxH = data[i];
     }
-    let r = maxH - minH || 1;
+    const range = Math.max(maxH - minH, 0.001);
 
-    for (let i = 0; i < hData.length; i++) {
-        const val = Math.floor(((hData[i] - minH) / r) * 255);
+    for (let i = 0; i < data.length; i++) {
+        const val = Math.floor(((data[i] - minH) / range) * 255);
         iData.data[i * 4] = iData.data[i * 4 + 1] = iData.data[i * 4 + 2] = val;
         iData.data[i * 4 + 3] = 255;
     }
     tempCtx.putImageData(iData, 0, 0);
 
-    // Scale and draw to main canvas
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, targetSide, targetSide);
+    // Smooth scaling to target resolution
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(tempCanvas, 0, 0, side, side, 0, 0, targetSide, targetSide);
 
-    return hCanvas.toDataURL('image/png').split(',')[1];
+    return hCanvas.toDataURL('image/png');
+}
+
+function parseResponse(text, startPos, targetPos, terrainSize) {
+    try {
+        const match = text.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(match[0]);
+        const validWaypoints = (parsed.waypoints || []).map(wp => [
+            Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[0])),
+            Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[1]))
+        ]);
+        return { waypoints: validWaypoints, quote: parsed.quote || "Astro-Core Active.", reasoning: parsed.reasoning || "Route established.", isAi: true };
+    } catch (e) { return { waypoints: [], quote: "Format Violation", reasoning: "Analysis failed.", isAi: false }; }
 }
 
 export function summarizeFan(trajectories) {
+    if (!trajectories) return "";
     const s = trajectories.reduce((acc, t) => { acc[t.risk]++; return acc; }, { safe: 0, warning: 0, critical: 0 });
-    return `${s.safe}/${trajectories.length} safe`;
+    return `${s.safe}/${trajectories.length} safe trajectories. SCVaR: ${s.critical > 5 ? 'High' : 'Low'}`;
 }

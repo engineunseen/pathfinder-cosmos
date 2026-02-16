@@ -1,5 +1,4 @@
-# UNSEEN PATHFINDER: Project Architecture & Development Status
-**Version:** v0.7.5-alpha
+**Version:** v0.9.6
 **Date:** February 14, 2026
 **Engine:** React + Three.js + Cannon.js + Gemini 3.0
 
@@ -12,6 +11,19 @@ This project demonstrates a "Cognitive Bridge" where **Generative Intelligence**
 
 ---
 
+## Technical Stack
+- **Core:** React + Vite
+- **3D Engine:** Three.js + React Three Fiber
+- **Physics:** Cannon-es
+- **AI Core:** Google Generative AI SDK
+- **Models:**
+    - **MAJOR WARNING:** ONLY GEMINI 3 GENERATION MODELS ALLOWED.
+    - **MAJOR WARNING:** ONLY GEMINI 3 GENERATION MODELS ALLOWED.
+    - **MAJOR WARNING:** ONLY GEMINI 3 GENERATION MODELS ALLOWED.
+    - `gemini-3-flash-preview` (Reasoning & Autopilot)
+    - `gemini-3-pro-preview` (Strategic Planning)
+- **Deployment:** Netlify
+
 ## 2. Multi-Agent AI Stack (Level 1 & 2)
 
 ### **The STRATEGIC ARCHITECT (The Mapper)**
@@ -22,8 +34,16 @@ This project demonstrates a "Cognitive Bridge" where **Generative Intelligence**
 
 ### **The PHYSICAL SPECIALIST (The Scientist)**
 - **Model:** `gemini-3-flash-preview` (Isolated stream).
-- **Function:** Real-time physics reporting. Monitors regolith friction and thermal gradients.
-- **Output:** Technical status alerts in the system terminal.
+- **Tactical Autopilot**: Real-time kinetic execution (Gemini 3.5 Flash / Gemini 3.0 Flash). Direct physics control with Kinetic Body Awareness.
+- **Monte Carlo Overlay**: Predictive stability visualization (NVIDIA Cosmos Reasoning / NVIDIA Cosmos VL-7B).
+
+## New in v0.8.28
+- **AiTrail**: Cyan neon path visualization active only during Autopilot. Confirms AI trajectory in real-time.
+- **Sensory Layer (Cognitive Feed)**: Semantic definitions for sCVaR (Stochastic Conditional Value at Risk) and SMaR (Stability Margin at Risk).
+  - *sCVaR*:Probability of mission-ending event (0-100). Throttles at >40.
+  - *SMaR*: Distance to rollover threshold (meters). Steers away at <10m.
+- **Lidar Sensor (v0.8.31)**: 8-directional topographical sweep (5m/10m samples). Provides real-time 3D depth awareness.
+- **Spline Adherence**: Autopilot mission logic strictly following Architect's waypoint resolution (7/15/25 pts).
 
 ---
 
@@ -38,7 +58,7 @@ This project demonstrates a "Cognitive Bridge" where **Generative Intelligence**
 
 ---
 
-## 4. Operational Transition (v0.7.5+)
+## 4. Operational Transition (v0.8.0+)
 - **Manual Mode**: Direct human control with MC visuals (Co-Pilot).
 - **Autopilot (Strategic)**: The rover follows the ARCHITECT's path while the MC Engine throttles speed based on real-time sCVaR.
 - **AI Autopilot (Planned)**: An end-to-end AI driver that uses the MC fan as direct feedback to stay in "Green" futures.
@@ -55,7 +75,7 @@ This project demonstrates a "Cognitive Bridge" where **Generative Intelligence**
     - [x] Risk Metrics (sCVaR/SMaR) synchronization.
 
 - **Incoming:**
-    - [ ] **AI-Driven Autopilot**: Dynamic steering based on MC fan results.
+    - [x] **AI-Driven Autopilot**: Dynamic steering based on MC fan and inertial reasoning (Cognitive).
     - [ ] **NVIDIA Cosmos Reasoning**: Integration of the edge-calculus server.
 
 ---
@@ -68,7 +88,7 @@ This project demonstrates a "Cognitive Bridge" where **Generative Intelligence**
 - ALWAYS log raw AI responses to ensure transparency.
 
 **Version Tagging:**
-- Updated in `HUD.jsx` and `store.js`. Current: **v0.7.5-alpha**.
+- Updated in `HUD.jsx` and `store.js`. Current: **v0.8.4-alpha**.
 
 ---
 **Restoration Guide:**

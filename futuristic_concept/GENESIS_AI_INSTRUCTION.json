@@ -18,7 +18,7 @@
                 "output": "Navigational Waypoints Vector",
                 "logic": "Deep topographic hazards analysis. No straight lines. Respects gradient variance."
             },
-            "level_2_povodir": {
+            "level_2_autopilot": {
                 "role": "Tactical Guide (Autopilot)",
                 "input": "Architect Waypoints + Real-time Telemetry + Monte Carlo Risk Data",
                 "output": "Steer/Throttle commands",
@@ -38,13 +38,13 @@
     "operational_modes": {
         "manual": "Human control. Ground-truth kinetics.",
         "ai_assist": "Human control + Monte Carlo overlay (Ghost Trajectories).",
-        "full_autopilot": "Povodir-driven trajectory based on Architect path, throttled by sCVaR/SMaR thresholds."
+        "full_autopilot": "Autopilot-driven trajectory based on Architect path, throttled by sCVaR/SMaR thresholds."
     },
     "instruction_to_next_agent": {
         "step_0": "Initialize spherical world with raycast-based surface mapping.",
         "step_1": "Implement the Monte Carlo worker as the primary source of truth for risk.",
         "step_2": "Integrate Reasoning API (Gemini/Cosmos) as the Architect role.",
-        "step_3": "Build the Povodir logic to dynamically weight Architect waypoints against Monte Carlo 'Red' zones.",
+        "step_3": "Build the Autopilot logic to dynamically weight Architect waypoints against Monte Carlo 'Red' zones.",
         "step_4": "Enforce 100% Transparency. Never use heuristics to hide AI unavailability."
     }
 }

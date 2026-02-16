@@ -204,9 +204,11 @@ function runSimulation(state, isAutopilot) {
 
             path.push([px, py + 0.2, pz]);
             if (risk === 'critical') {
-                // Penalty for collision/critical failure
-                maxTilt = 90; // Max severity
-                minSafetyMargin = -10; // Negative margin
+                // If it's a TILT risk, set maxTilt to 90. If it's a BOUNDARY risk, just stop.
+                if (currentTilt > tiltThreshold || slope > slopeThreshold) {
+                    maxTilt = 90;
+                    minSafetyMargin = -10;
+                }
                 break;
             }
         }

@@ -105,11 +105,14 @@ export function getSlopeAtPosition(heightData, worldX, worldZ) {
 
 // Generate the complete terrain data
 export function generateTerrainData(seed) {
-    const rng = mulberry32(Math.floor(seed));
+    // V0.9.40: CALIBRATION MODE (Ideal Flat Surface)
+    const isCalibration = seed === 999;
+
+    const rng = mulberry32(Math.floor(isCalibration ? 1234 : seed));
     const noise2D = createNoise2D(() => rng());
 
-    const craters = generateCraters(rng);
-    const rocks = generateRocks(rng);
+    const craters = isCalibration ? [] : generateCraters(rng);
+    const rocks = isCalibration ? [] : generateRocks(rng);
     const heightData = new Float32Array((TERRAIN_SEGMENTS + 1) * (TERRAIN_SEGMENTS + 1));
 
     // Build heightmap
@@ -117,6 +120,11 @@ export function generateTerrainData(seed) {
         for (let ix = 0; ix <= TERRAIN_SEGMENTS; ix++) {
             const worldX = (ix / TERRAIN_SEGMENTS - 0.5) * TERRAIN_SIZE;
             const worldZ = (iz / TERRAIN_SEGMENTS - 0.5) * TERRAIN_SIZE;
+
+            if (isCalibration) {
+                heightData[iz * (TERRAIN_SEGMENTS + 1) + ix] = 0;
+                continue;
+            }
 
             // Layer 1: Base rolling hills (Perlin noise, multiple octaves)
             let height = 0;
@@ -134,11 +142,9 @@ export function generateTerrainData(seed) {
 
                 if (normalizedDist < 2.0) {
                     if (normalizedDist < 1.0) {
-                        // Inside crater — bowl shape
                         const bowlFactor = 1 - normalizedDist * normalizedDist;
                         height -= crater.depth * bowlFactor;
                     }
-                    // Rim
                     if (normalizedDist > 0.7 && normalizedDist < 1.5) {
                         const rimDist = Math.abs(normalizedDist - 1.0);
                         const rimFactor = Math.exp(-rimDist * rimDist / (crater.rimSharpness * 0.15));
@@ -146,12 +152,11 @@ export function generateTerrainData(seed) {
                     }
                 }
             }
-
             heightData[iz * (TERRAIN_SEGMENTS + 1) + ix] = height;
         }
     }
 
-    // Generate Cannon.js heightfield data (rows of columns)
+    // Generate Cannon.js heightfield data
     const matrix = [];
     for (let iz = 0; iz <= TERRAIN_SEGMENTS; iz++) {
         const row = [];
@@ -161,36 +166,35 @@ export function generateTerrainData(seed) {
         matrix.push(row);
     }
 
-    // Filter rocks to avoid placing them inside craters or too close to spawn
-    const filteredRocks = rocks.filter((rock) => {
-        // Don't place rocks near spawn
+    // Rocks
+    const filteredRocks = isCalibration ? [] : rocks.filter((rock) => {
         if (Math.abs(rock.x) < 10 && Math.abs(rock.z) < 10) return false;
-        // Don't place rocks deep inside craters
         for (const crater of craters) {
-            const dx = rock.x - crater.x;
-            const dz = rock.z - crater.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < crater.radius * 0.6) return false;
+            if (Math.sqrt((rock.x - crater.x) ** 2 + (rock.z - crater.z) ** 2) < crater.radius * 0.6) return false;
         }
         return true;
     });
 
-    // Update rock Y positions based on terrain height
     for (const rock of filteredRocks) {
         rock.y = getHeightAtPosition(heightData, rock.x, rock.z);
     }
 
-    // Generate Earth beacon position — Far corner
-    const quadrantX = rng() > 0.5 ? 1 : -1;
-    const quadrantZ = rng() > 0.5 ? 1 : -1;
+    // Target/Spawn positioning
+    let beaconX, beaconZ, spawnX, spawnZ;
+    if (isCalibration) {
+        // Corner-to-Corner Test
+        beaconX = 80; beaconZ = 80;
+        spawnX = -80; spawnZ = -80;
+    } else {
+        const quadrantX = rng() > 0.5 ? 1 : -1;
+        const quadrantZ = rng() > 0.5 ? 1 : -1;
+        beaconX = quadrantX * (65 + rng() * 25);
+        beaconZ = quadrantZ * (65 + rng() * 25);
+        spawnX = -quadrantX * (70 + rng() * 10);
+        spawnZ = -quadrantZ * (70 + rng() * 10);
+    }
 
-    const beaconX = quadrantX * (65 + rng() * 25);
-    const beaconZ = quadrantZ * (65 + rng() * 25);
     const beaconY = getHeightAtPosition(heightData, beaconX, beaconZ) + 2;
-
-    // Generate Spawn point — Exact opposite quadrant
-    const spawnX = -quadrantX * (70 + rng() * 10);
-    const spawnZ = -quadrantZ * (70 + rng() * 10);
 
     return {
         heightData,

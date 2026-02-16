@@ -2,7 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v0.7.5-alpha";
+export const VERSION = "v0.9.45";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -47,11 +47,13 @@ export const getInitialState = () => ({
     inputState: { forward: 0, backward: 0, left: 0, right: 0, brake: false },
     brightness: 1.2,
     shadowContrast: 0.5,
-    chromaticAberration: false,
+    chromaticAberration: true,
     apiKey: localStorage.getItem('pathfinder_api_key') || '',
     aiModel: 'gemini-3-flash-preview',
     logs: [{ id: Date.now(), text: "SYSTEM: INITIALIZING NAVIGATION STACK...", type: 'info' }],
+    waypointCount: 7,
     terminalOpen: false,
+    isCalibrationMode: false,
 });
 
 function simulationReducer(state, action) {
@@ -176,6 +178,23 @@ function simulationReducer(state, action) {
                     type: 'info',
                     timestamp: new Date().toLocaleTimeString()
                 }, ...state.logs].slice(0, 50)
+            };
+        case 'SET_WAYPOINT_COUNT':
+            return { ...state, waypointCount: action.payload };
+        case 'TOGGLE_CALIBRATION':
+            const isCalOn = !state.isCalibrationMode;
+            return {
+                ...getInitialState(),
+                language: state.language,
+                apiKey: state.apiKey,
+                isCalibrationMode: isCalOn,
+                terrainSeed: isCalOn ? 999 : Math.random() * 10000,
+                logs: [{
+                    id: Date.now(),
+                    text: isCalOn ? "SYSTEM: CALIBRATION MODE ENGAGED (FLAT PLANE)" : "SYSTEM: CALIBRATION MODE DISENGAGED (LUNAR TERRAIN RESTORED)",
+                    type: isCalOn ? 'warning' : 'info',
+                    timestamp: new Date().toLocaleTimeString()
+                }]
             };
         case 'TOGGLE_TERMINAL':
             return { ...state, terminalOpen: !state.terminalOpen };

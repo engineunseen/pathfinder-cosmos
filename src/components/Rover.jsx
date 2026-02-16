@@ -1,8 +1,7 @@
-// components/Rover.jsx — 6-wheel rover with custom raycast suspension physics
 import React, { useRef, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useBox } from '@react-three/cannon';
-import { RoundedBox } from '@react-three/drei';
+import { RoundedBox, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useSimulationDispatch, ROLLOVER_ANGLE } from '../store';
 import { getHeightAtPosition } from '../terrain';
@@ -61,7 +60,7 @@ function ChamferBox({ args, bevel = 0.05, color, metalness, roughness, ...props 
     );
 }
 
-const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 0], terrainData }, ref) => {
+const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 0], terrainData, isAiStalled }, ref) => {
     const dispatch = useSimulationDispatch();
 
     // Internal state refs — V1.4.7: Initialize with startPosition to avoid [0,0,0] loop
@@ -288,7 +287,9 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
                 roll: (euler.z * 180 / Math.PI).toFixed(1),
                 position: position.current,
                 velocity: velocity.current,
-                rotation: euler.toArray()
+                rotation: euler.toArray(),
+                angularVelocity: angVelocity.current,
+                wheelsOnGround
             });
         }
 
@@ -351,6 +352,26 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
                     })
                 )}
             </group>
+
+            {/* AI Status Indicator (V0.8.25) */}
+            {isAiStalled && (
+                <group position={[0, 1.8, 0]}>
+                    <Text
+                        fontSize={0.2}
+                        color="#FF0000"
+                        anchorX="center"
+                        anchorY="middle"
+                        font="/fonts/Inter-Bold.woff" // Assuming font exists or falls back
+                    >
+                        [ AI STALLED ]
+                    </Text>
+                    <mesh position={[0, -0.25, 0]}>
+                        <boxGeometry args={[1.2, 0.02, 0.02]} />
+                        <meshStandardMaterial color="#FF0000" emissive="#FF0000" emissiveIntensity={2} />
+                    </mesh>
+                    <pointLight color="#FF0000" intensity={1} distance={3} />
+                </group>
+            )}
 
             {/* Antenna */}
             <group position={[-0.65, 0.5, -1.15]}>

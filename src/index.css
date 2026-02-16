@@ -222,7 +222,8 @@ canvas {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  width: 420px;
+  width: 600px;
+  max-width: 90vw;
   text-align: center;
   padding: 10px 24px;
   z-index: 90;
@@ -358,22 +359,160 @@ canvas {
   background: rgba(0, 255, 255, 0.2);
 }
 
+.hud-button.active {
+  background: rgba(0, 255, 255, 0.15);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  text-shadow: var(--glow-cyan);
+}
+
 .btn-bracket {
   color: rgba(0, 255, 255, 0.4);
   margin: 0 2px;
 }
 
-/* ---- AI INDICATOR ---- */
-.ai-indicator {
+/* ---- LIDAR SCAN PANEL (Bottom Right) ---- */
+.lidar-panel {
   position: fixed;
-  top: 280px;
-  /* Further lowered to avoid any chance of overlap */
+  bottom: 24px;
   right: 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  width: 180px;
+  z-index: 1010;
   pointer-events: none;
+}
+
+.lidar-inner {
+  padding: 12px;
+  background: var(--bg-panel-solid);
+  backdrop-filter: blur(8px);
+}
+
+.radar-container {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto;
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.radar-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.radar-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+.radar-circle.c5 {
+  width: 50%;
+  height: 50%;
+}
+
+.radar-circle.c10 {
+  width: 90%;
+  height: 90%;
+}
+
+.radar-axis {
+  position: absolute;
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.axis-h {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+
+.axis-v {
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+}
+
+.radar-sweep {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: conic-gradient(from 0deg, rgba(0, 255, 255, 0.2) 0deg, transparent 90deg);
+  animation: radar-sweep 4s linear infinite;
+  border-radius: 50%;
+}
+
+@keyframes radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-point {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  margin-left: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  transition: all 0.3s ease;
+  z-index: 5;
+}
+
+.radar-point .tooltip {
+  visibility: hidden;
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 8px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.radar-point:hover .tooltip {
+  visibility: visible;
+}
+
+.lidar-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-item .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
 }
 
 .ai-status-row {
@@ -608,8 +747,43 @@ canvas {
   margin-top: 20px;
 }
 
+/* ---- HUD BUTTONS (Generic) ---- */
+.hud-button {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.hud-button:hover {
+  background: rgba(0, 255, 255, 0.1);
+  box-shadow: var(--glow-cyan);
+}
+
+/* Higher specificity for active state */
+.hud-button.active,
+button.hud-button.active {
+  background: var(--cyan) !important;
+  color: #000 !important;
+  box-shadow: 0 0 10px var(--cyan), inset 0 0 5px rgba(255, 255, 255, 0.5) !important;
+  font-weight: 800 !important;
+  border-color: var(--white) !important;
+}
+
+.label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 1px;
+}
+
 /* ---- GAME OVER OVERLAY ---- */
-.game-over-overlay {
+.outcome-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -618,11 +792,71 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px);
-  z-index: 1500;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  z-index: 2500;
   animation: fadeIn 0.4s ease;
-  transition: padding 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.outcome-panel {
+  width: 500px;
+  max-width: 90vw;
+  text-align: center;
+  padding: 40px !important;
+  border: 1px solid var(--border-color);
+}
+
+.outcome-title {
+  font-size: 24px;
+  letter-spacing: 4px;
+  margin-bottom: 20px;
+}
+
+.outcome-title.success {
+  color: var(--green);
+  text-shadow: var(--glow-green);
+}
+
+.outcome-title.fail {
+  color: var(--red);
+  text-shadow: var(--glow-red);
+}
+
+.outcome-details {
+  margin-bottom: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 15px 0;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+/* ---- SCANLINES EFFECT (Global for all panels) ---- */
+.hud-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(rgba(0, 255, 255, 0.4) 50%,
+      transparent 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 200;
+  /* Over content */
+  mix-blend-mode: overlay;
+  opacity: 1;
+}
+
+.hud-panel>* {
+  position: relative;
+  z-index: 101;
 }
 
 @keyframes fadeIn {
@@ -691,6 +925,9 @@ canvas {
   background: rgba(0, 255, 65, 0.1) !important;
 }
 
+/* ---- SCANLINES EFFECT (via ::after pseudo-element) ---- */
+/* Standardized above, removing redundant blocks */
+
 /* ---- MOBILE CONTROLS ---- */
 .mobile-controls {
   position: fixed;
@@ -699,8 +936,7 @@ canvas {
   right: 0;
   height: 200px;
   pointer-events: none;
-  z-index: 90;
-  /* Below Terminal (1000) */
+  z-index: 10000;
 }
 
 .mobile-controls>* {
@@ -737,25 +973,6 @@ canvas {
   box-shadow: var(--glow-cyan);
 }
 
-.mobile-ai-btn {
-  position: absolute;
-  bottom: 50px;
-  right: 30px;
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  border: 2px solid var(--green);
-  background: rgba(0, 255, 65, 0.1);
-  color: var(--green);
-  font-family: var(--font);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  cursor: pointer;
-  box-shadow: var(--glow-green);
-  touch-action: none;
-}
-
 .mobile-brake-btn {
   position: absolute;
   bottom: 60px;
@@ -778,35 +995,11 @@ canvas {
   justify-content: center;
   transition: all 0.2s;
   z-index: 100;
-  /* Above joystick (which is part of mobile-controls at 90) */
 }
 
 .mobile-brake-btn:active {
   background: rgba(255, 0, 85, 0.4);
   box-shadow: 0 0 15px var(--red);
-}
-
-/* ---- SCANLINES EFFECT (via ::after pseudo-element) ---- */
-.hud-panel::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 255, 255, 0.15) 2px,
-      rgba(0, 255, 255, 0.15) 4px);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Ensure content stays above scanlines — but exclude corners and scanlines-bg */
-.hud-panel>*:not(.corner):not(.scanlines-bg) {
-  position: relative;
-  z-index: 2;
 }
 
 /* ---- RESPONSIVE ---- */
@@ -817,7 +1010,6 @@ canvas {
     min-width: 160px;
     font-size: 10px;
     z-index: 1010;
-    /* Ensure on top in mobile */
   }
 
   .panel-mission {
@@ -825,15 +1017,14 @@ canvas {
     right: 8px;
     min-width: 140px;
     z-index: 1010;
-    /* Ensure on top in mobile */
   }
 
   .panel-controls {
     bottom: 200px;
-    /* Above mobile controls zone */
-    min-width: 280px;
+    width: 90%;
+    max-width: 400px;
+    min-width: unset;
     z-index: 1010;
-    /* Ensure on top in mobile */
   }
 
   .controls-hint {
@@ -872,13 +1063,8 @@ canvas {
   transform: translateX(-320px);
 }
 
-.hud-overlay.terminal-visible .panel-controls,
-.hud-overlay.terminal-visible .top-logos,
-.hud-overlay.terminal-visible .offline-warning-box {
-  transform: translateX(calc(-50% - 160px));
+.hud-overlay.terminal-visible .settings-toggle {
+  transform: translateX(-320px);
 }
 
-.hud-overlay.terminal-visible .modal-overlay,
-.hud-overlay.terminal-visible .game-over-overlay {
-  padding-right: 320px;
-}
+/* Do NOT shift the outcome overlay or modal, they should stay centered */

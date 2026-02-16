@@ -1,8 +1,15 @@
-# LUNAR RISK: MONTE CARLO PATHFINDER (v0.7.5-alpha)
+# LUNAR RISK: MONTE CARLO PATHFINDER (v0.9.6)
 
 A high-fidelity 3D simulation game demonstrating the superiority of Monte Carlo risk assessment and Generative AI reasoning over human intuition in autonomous lunar driving.
 
 Built with **React Three Fiber**, **Cannon.js**, and **Gemini 3.0 API**.
+
+## 🤖 Powered by Gemini 3.0
+**IMPORTANT: THIS PROJECT USES GEMINI 3.0 MODELS ONLY.**
+**IMPORTANT: THIS PROJECT USES GEMINI 3.0 MODELS ONLY.**
+**IMPORTANT: THIS PROJECT USES GEMINI 3.0 MODELS ONLY.**
+
+We leverage the latest **Gemini 3 Flash** and **Gemini 3 Pro** models for:
 
 ## 🚀 Features
 

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { useSimulationState, useSimulationDispatch } from '../store';
+import { useSimulationState, useSimulationDispatch, VERSION } from '../store';
 
 const LOG_COLORS = {
     info: '#00FFFF',
@@ -30,9 +30,9 @@ export default function TerminalPanel() {
                 <span className="handle-label">LOGS</span>
             </button>
 
-            <div className="terminal-container">
+            <div className="terminal-container hud-panel">
                 <div className="terminal-header">
-                    <span className="terminal-title">SYSTEM TERMINAL v0.7.5-alpha</span>
+                    <span className="terminal-title">SYSTEM TERMINAL {VERSION}</span>
                     <div className="terminal-status-dots">
                         <span className="dot" />
                         <span className="dot" />
@@ -40,7 +40,7 @@ export default function TerminalPanel() {
                     </div>
                 </div>
                 <div className="terminal-content" ref={scrollRef}>
-                    <div className="terminal-interline-overlay" />
+
                     {logs.map((log) => (
                         <div key={log.id} className={`terminal-line ${log.type}`}>
                             <span className="line-timestamp">[{log.timestamp || '--:--:--'}]</span>
@@ -51,7 +51,7 @@ export default function TerminalPanel() {
                                 {log.image && (
                                     <div className="line-image-container" style={{ marginTop: '5px', border: '1px solid rgba(0, 255, 255, 0.2)', padding: '2px', background: 'rgba(0, 0, 0, 0.4)', alignSelf: 'flex-start' }}>
                                         <img
-                                            src={`data:image/png;base64,${log.image}`}
+                                            src={log.image.startsWith('data:') ? log.image : `data:image/png;base64,${log.image}`}
                                             alt="LUNAR TOPOLOGY"
                                             style={{ width: '128px', height: '128px', display: 'block', imageRendering: 'pixelated' }}
                                         />
@@ -60,7 +60,7 @@ export default function TerminalPanel() {
                             </div>
                         </div>
                     ))}
-                    <div className="terminal-scanline" />
+
                 </div>
             </div>
 
@@ -171,22 +171,7 @@ export default function TerminalPanel() {
                     position: relative;
                 }
 
-                /* INTERLINE SCANLINE EFFECT */
-                .terminal-interline-overlay {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: repeating-linear-gradient(
-                        transparent 0,
-                        transparent 2px,
-                        rgba(0, 255, 255, 0.03) 2px,
-                        rgba(0, 255, 255, 0.03) 4px
-                    );
-                    pointer-events: none;
-                    z-index: 5;
-                }
+
 
                 .terminal-content::-webkit-scrollbar {
                     width: 4px;
@@ -215,25 +200,7 @@ export default function TerminalPanel() {
                     letter-spacing: 0.5px;
                 }
                 
-                .terminal-scanline {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: linear-gradient(
-                        rgba(18, 16, 16, 0) 50%,
-                        rgba(0, 0, 0, 0.2) 50%
-                    ), linear-gradient(
-                        90deg,
-                        rgba(255, 0, 0, 0.04),
-                        rgba(0, 255, 0, 0.01),
-                        rgba(0, 255, 0, 0.04)
-                    );
-                    background-size: 100% 2px, 3px 100%;
-                    pointer-events: none;
-                    opacity: 0.1;
-                }
+
                 
                 @keyframes febFadeIn {
                     from { opacity: 0; transform: translateX(10px); }

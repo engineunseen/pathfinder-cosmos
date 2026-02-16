@@ -1,5 +1,5 @@
 {
-    "dna_sequence": "LUNAR-PATHFINDER-0.7.5",
+    "dna_sequence": "LUNAR-PATHFINDER-0.8.38",
     "mission_directive": "Rebuild the Lunar Pathfinder as a multi-agent cognitive system operating on a spherical moon surface. Ignore all interface artifacts; focus on the data-kinetic bridge.",
     "world_generation": {
         "geometry": "Spherical Orbiting Body (Little Prince Scale)",
@@ -19,7 +19,7 @@
             "output": "Navigational Spline {Waypoints}",
             "constraint": "No Straight Lines. Deep technical analysis of gradient variance based on visual terrain markers (craters, ridges, boulders)."
         },
-        "povodir": {
+        "autopilot": {
             "id": "Tactical_Guide",
             "model_type": "Real-time Control Policy",
             "responsibility": "Kinetic Execution (Guide)",
@@ -38,5 +38,5 @@
         }
     },
     "operational_truth": "Standardize on 100% transparency. If the Cognitive Bridge (AI-to-Physics) is broken, the mission is FATAL. No heuristic masks. No fake feedback.",
-    "restoration_key": "Build spherical physics first. Wrap the Architect's waypoints on the sphere. Feed the Povodir the Monte Carlo fan to avoid rollover on crater rims. The goal is not just pathfinding, but surviving the topography."
+    "restoration_key": "Build spherical physics first. Wrap the Architect's waypoints on the sphere. Feed the Autopilot the Monte Carlo fan to avoid rollover on crater rims. The goal is not just pathfinding, but surviving the topography."
 }
