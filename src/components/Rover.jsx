@@ -91,7 +91,7 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
                 // Only trigger damage on hard impacts, not normal driving
                 if (Math.abs(e.contact.contactNormal[1]) < 0.5) { // side impact
                     isSimulationOver.current = true;
-                    dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'gameover', reason: 'damage' } });
+                    dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'failed', reason: 'damage' } });
                 }
             }
         }
@@ -132,9 +132,10 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
 
     // Physics Loop
     useFrame((state, delta) => {
-        if (isSimulationOver.current || !terrainData) return;
+        if (!terrainData) return;
 
-        const input = getInput();
+        const isInputActive = !isSimulationOver.current;
+        const input = isInputActive ? getInput() : { forward: 0, backward: 0, left: 0, right: 0, brake: true };
         const { forward, backward, left, right, brake } = input;
 
         // Steering
@@ -275,7 +276,7 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
 
         if ((pitch > ROLLOVER_ANGLE || roll > ROLLOVER_ANGLE) && !isSimulationOver.current) {
             isSimulationOver.current = true;
-            dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'gameover', reason: 'rollover' } });
+            dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'failed', reason: 'rollover' } });
         }
 
         // Telemetry

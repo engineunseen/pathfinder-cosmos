@@ -4,8 +4,8 @@ import * as THREE from 'three';
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
 
-const f1 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(1) : '0.0');
-const f2 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(2) : '0.00');
+export const f1 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(1) : '0.0');
+export const f2 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(2) : '0.00');
 
 // ============================================================
 // LEVEL 1: STRATEGIC PLANNER (Astro-Core Architecture)
@@ -82,6 +82,12 @@ export async function getAutopilotCommand(apiKey, state, aiModel = 'gemini-3-fla
     const distToBoundary = terrainData ? (terrainData.size / 2) - Math.max(Math.abs(position[0]), Math.abs(position[2])) : 100;
     const boundaryWarning = distToBoundary < 15 ? `!!! CRITICAL: MAP BOUNDARY AT ${f1(distToBoundary)}m !!!` : "Clear";
 
+    const sensorOverlay = `
+### SENSOR OVERLAY (INTELLIGENCE):
+- MONTE-CARLO RISK: ${state.mcSummary || "No Data"}
+- ARCHITECT PATH: ${state.currentPathWaypoints || "No Data"}
+`;
+
     const textPrompt = `You are the CYBER-PILOT of UNSEEN-1 (150kg, 6-wheel Lunar Rover).
     
 PHYSICAL CAPABILITIES:
@@ -94,11 +100,13 @@ KINETIC CONTEXT:
 - CURRENT SPEED: ${f1(new THREE.Vector3(...velocity).length() * 3.6)} km/h
 - LIDAR: ${lidarSweep}
 - BOUNDARY: ${boundaryWarning}
+${(state.useMonteCarlo || state.usePath) ? sensorOverlay : ""}
 
 MISSION DIRECTIVES:
 1. SURVIVAL FIRST: If LIDAR shows obstacle < 5m, you MUST maneuver/reverse regardless of target.
 2. BEARING SENSITIVITY: Near target (<15m), bearing angles become highly sensitive/noisy due to latency. Prioritize consistent forward momentum and small steering adjustments. 
 3. MOMENTUM MANAGEMENT: Do not trigger REVERSE (-0.5) just because of bearing jitter. Only use it for deliberate repositioning if target is clearly missed or blocked.
+4. STRATEGIC ALIGNMENT: Use the ARCHITECT PATH as a loose guide, but prioritize LIDAR for immediate local safety. 
 
 JSON ONLY: {"steer": -1 to 1, "throttle": -1 to 1, "reasoning": "string"}`;
 
@@ -220,12 +228,30 @@ function parseResponse(text, startPos, targetPos, terrainSize) {
     try {
         const match = text.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(match[0]);
-        const validWaypoints = (parsed.waypoints || []).map(wp => [
-            Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[0])),
-            Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[1]))
-        ]);
-        return { waypoints: validWaypoints, quote: parsed.quote || "Astro-Core Active.", reasoning: parsed.reasoning || "Route established.", isAi: true };
-    } catch (e) { return { waypoints: [], quote: "Format Violation", reasoning: "Analysis failed.", isAi: false }; }
+        // V0.9.47: HARD COORD VALIDATION (Prevent NaN Black Screen)
+        const validWaypoints = (parsed.waypoints || [])
+            .filter(wp => Array.isArray(wp) && wp.length >= 2 && typeof wp[0] === 'number' && typeof wp[1] === 'number' && !isNaN(wp[0]) && !isNaN(wp[1]))
+            .map(wp => [
+                Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[0])),
+                Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[1]))
+            ]);
+
+        if (validWaypoints.length === 0) throw new Error("NO_VALID_COORDINATES");
+
+        return {
+            waypoints: validWaypoints,
+            quote: parsed.quote || "Astro-Core Active.",
+            reasoning: parsed.reasoning || "Route established.",
+            isAi: true
+        };
+    } catch (e) {
+        return {
+            waypoints: [],
+            quote: `Protocol Breach: ${e.message}`,
+            reasoning: "Analysis failed due to coordinate instability.",
+            isAi: false
+        };
+    }
 }
 
 export function summarizeFan(trajectories) {

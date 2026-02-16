@@ -63,7 +63,7 @@ canvas {
 .offline-warning-box {
   pointer-events: none;
   position: absolute;
-  top: 80px;
+  top: 100px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(255, 0, 0, 0.3);
@@ -75,11 +75,143 @@ canvas {
   backdrop-filter: blur(5px);
   font-family: monospace;
   font-size: 14px;
-  transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.offline-warning-box.unseen-core-active {
+  background: rgba(0, 255, 255, 0.15);
+  border: 1px solid var(--cyan);
+  box-shadow: var(--glow-cyan);
+  color: var(--cyan);
+  top: 100px;
+}
+
+.core-icon-pulse {
+  width: 12px;
+  height: 12px;
+  background: var(--cyan);
+  border-radius: 50%;
+  box-shadow: var(--glow-cyan);
+  animation: core-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes core-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+
+  50% {
+    transform: scale(1.4);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+}
+
+.hud-panels-hidden .panel-telemetry,
+.hud-panels-hidden .panel-mission,
+.hud-panels-hidden .panel-controls,
+.hud-panels-hidden .lidar-panel,
+.hud-panels-hidden .top-logos,
+.hud-panels-hidden .offline-warning-box {
+  transform: translateY(-200%) !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hud-panels-hidden .panel-controls {
+  transform: translate(-50%, 200%) !important;
+}
+
+.cinematic-toggle {
+  z-index: 2100;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-left: none;
+  color: rgba(0, 255, 255, 0.5);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+
+.cinematic-toggle:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+.help-panel {
+  border-color: var(--cyan) !important;
+  box-shadow: var(--glow-cyan);
 }
 
 .hud-overlay>* {
   pointer-events: auto;
+}
+
+/* ---- REFINED HELP ICON ---- */
+.help-icon-btn {
+  background: none;
+  border: none;
+  color: rgba(0, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.help-icon-btn:hover {
+  color: var(--cyan);
+  filter: drop-shadow(0 0 5px var(--cyan));
+}
+
+.i-svg-icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.3s;
+}
+
+.help-icon-btn:hover .i-svg-icon {
+  transform: scale(1.1);
+}
+
+/* ---- SCROLLABLE HELP ---- */
+.help-content-scroll {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Custom scrollbar for HUD */
+.help-content-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.help-content-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.help-content-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.help-content-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--cyan);
 }
 
 /* ---- CORNER BRACKET PANELS ---- */
@@ -783,6 +915,10 @@ button.hud-button.active {
 }
 
 /* ---- GAME OVER OVERLAY ---- */
+.mission-status-bar {
+  transition: all 0.3s ease;
+}
+
 .outcome-overlay {
   position: fixed;
   top: 0;
@@ -793,9 +929,10 @@ button.hud-button.active {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
-  z-index: 2500;
-  animation: fadeIn 0.4s ease;
+  backdrop-filter: blur(15px);
+  z-index: 999999;
+  animation: fadeIn 0.5s ease forwards;
+  pointer-events: auto !important;
 }
 
 .outcome-panel {

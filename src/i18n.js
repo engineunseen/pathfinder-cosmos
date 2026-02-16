@@ -59,6 +59,24 @@ export const STRINGS = {
         ultra: 'ULTRA',
         lidarScan: 'LIDAR TOPOGRAPHICAL SCAN',
         proximity: 'PROXIMITY',
+        unseenCore: 'UNSEEN CORE',
+        digitalTwin: 'DIGITAL TWIN',
+        cinematicMode: 'CINEMATIC MODE',
+        help: 'HELP / MANUAL',
+        accuracy: 'ARRIVAL ACCURACY',
+        easy: 'EASY',
+        normal: 'NORMAL',
+        hard: 'HARD',
+        useMonteCarlo: 'SMART SENSORS (MONTE-CARLO)',
+        usePlannedPath: 'FOLLOW ARCHITECT PATH',
+        helpContent: {
+            title: 'UNSEEN MISSION PROTOCOLS',
+            concept: 'Strategic simulation for training neural network pilots and human operators in extreme lunar environments. The platform evaluates traversal risks using high-fidelity physics and real-time AI reasoning.',
+            manual: 'MANUAL NAVIGATION: Direct motor control (WASD). Recommended for local obstacle clearance and high-precision docking at the Earth Beacon.',
+            ai: 'TACTICAL AUTOPILOT: Strategic AI integration (Gemini / NVIDIA). Compensates for signal latency by predicting rover state and applying future-weighted steering commands.',
+            core: 'UNSEEN CORE: A high-reliability "Digital Twin" fallback. Uses local Monte-Carlo heuristic fans to evaluate 100+ potential trajectories per second, ensuring safety without cloud connectivity.',
+            settings: 'MISSION PARAMETERS: Adjust waypoint resolution for the Architect, sensor awareness for the AI, and arrival precision thresholds (Easy/Normal/Hard).'
+        }
     },
     RU: {
         telemetry: 'ТЕЛЕМЕТРИЯ',
@@ -113,6 +131,24 @@ export const STRINGS = {
         ultra: 'УЛЬТРА',
         lidarScan: 'ТОПОГРАФИЧЕСКИЙ ЛИДАР',
         proximity: 'БЛИЗОСТЬ',
+        unseenCore: 'UNSEEN CORE',
+        digitalTwin: 'ЦИФРОВОЙ ДВОЙНИК',
+        cinematicMode: 'КИНЕМАТОГРАФИЧНЫЙ РЕЖИМ',
+        help: 'СПРАВКА / ИНФОРМАЦИЯ',
+        accuracy: 'ТОЧНОСТЬ ПРИБЫТИЯ',
+        easy: 'ПРОСТО',
+        normal: 'НОРМА',
+        hard: 'СЛОЖНО',
+        useMonteCarlo: 'УМНЫЕ ДАТЧИКИ (М-КАРЛО)',
+        usePlannedPath: 'СЛЕДОВАТЬ ПУТИ АРХИТЕКТОРА',
+        helpContent: {
+            title: 'ПРОТОКОЛЫ МИССИИ UNSEEN',
+            concept: 'Стратегическая симуляция для подготовки нейросетевых пилотов и операторов в экстремальных условиях Луны. Платформа оценивает риски проходимости, используя физику высокой точности и ИИ-анализ в реальном времени.',
+            manual: 'РУЧНАЯ НАВИГАЦИЯ: Прямое управление крутящим моментом (WASD). Рекомендуется для преодоления критических локальных препятствий и прецизионной стыковки с Маяком Земли.',
+            ai: 'ТАКТИЧЕСКИЙ АВТОПИЛОТ: Интеграция стратегического ИИ (Gemini / NVIDIA). Компенсирует задержку сигнала, прогнозируя состояние ровера и применяя упреждающие команды управления.',
+            core: 'UNSEEN CORE: Оттказоустойчивый "Цифровой Двойник". Использует локальный веер траекторий Монте-Карло для оценки 100+ вариантов движения в секунду, обеспечивая безопасность без связи с облаком.',
+            settings: 'ПАРАМЕТРЫ МИССИИ: Настройка плотности маршрутных точек Архитектора, чувствительности сенсоров ИИ и порогов точности прибытия (Easy/Normal/Hard).'
+        }
     },
     UA: {
         telemetry: 'ТЕЛЕМЕТРІЯ',
@@ -167,5 +203,23 @@ export const STRINGS = {
         ultra: 'УЛЬТРА',
         lidarScan: 'ТОПОГРАФІЧНИЙ ЛІДАР',
         proximity: 'БЛИЗЬКІСТЬ',
+        unseenCore: 'UNSEEN CORE',
+        digitalTwin: 'ЦИФРОВИЙ ДВІЙНИК',
+        cinematicMode: 'КІНЕМАТОГРАФІЧНИЙ РЕЖИМ',
+        help: 'ДОВІДКА / ІНСТРУКЦІЯ',
+        accuracy: 'ТОЧНІСТЬ ПРИБУТТЯ',
+        easy: 'ЛЕГКО',
+        normal: 'НОРМА',
+        hard: 'СКЛАДНО',
+        useMonteCarlo: 'РОЗУМНІ ДАТЧИКИ (М-КАРЛО)',
+        usePlannedPath: 'ДОТРИМУВАТИСЬ ШЛЯХУ АРХІТЕКТОРА',
+        helpContent: {
+            title: 'ПРОТОКОЛИ МІСІЇ UNSEEN',
+            concept: 'Стратегічна симуляція для підготовки нейромережевих пілотів та операторів в екстремальних місячних умовах. Платформа оцінює ризики прохідності за допомогою фізики високої точності та ШІ-аналізу в реальному часі.',
+            manual: 'РУЧНА НАВІГАЦІЯ: Пряме керування двигунами (WASD). Рекомендується для подолання складних локальних перешкод та прецизійного стикування з Маяком Землі.',
+            ai: 'ТАКТИЧНИЙ АВТОПІЛОТ: Інтеграція стратегічного ШІ (Gemini / NVIDIA). Компенсує затримку сигналу, прогнозуючи стан ровера та застосовуючи випереджаючі команди керування.',
+            core: 'UNSEEN CORE: Відмовостійкий "Цифровий Двійник". Використовує локальне "віяло" траєкторій Монте-Карло для оцінки 100+ варіантів руху на секунду, забезпечуючи безпеку без зв’язку з хмарою.',
+            settings: 'ПАРАМЕТРИ МІСІЇ: Налаштування щільності маршрутних точок Архітектора, чутливості сенсорів ШІ та порогів точності прибуття (Easy/Normal/Hard).'
+        }
     },
 };

@@ -13,6 +13,7 @@ import {
   getInitialState,
   simulationReducer,
   LUNAR_GRAVITY,
+  ROLLOVER_ANGLE,
   DRIVE_MODES,
   COLORS,
   SimulationContext,
@@ -35,7 +36,7 @@ import Dust from './components/Dust';
 import AiTrail from './components/AiTrail';
 
 // AI Navigation System
-import { planStrategicRoute, getAutopilotCommand, summarizeFan, heightmapToImage } from './aiNavigator';
+import { planStrategicRoute, getAutopilotCommand, summarizeFan, heightmapToImage, getLidarData, f1 } from './aiNavigator';
 
 // Terrain Generation Utility
 import { generateTerrainData } from './terrain';
@@ -62,7 +63,7 @@ function PhysicsScene({
       <LunarTerrain terrainData={terrainData} />
       <Rocks rocks={terrainData.rocks} />
 
-      {simulationState === 'running' && (
+      {(simulationState === 'running' || simulationState === 'failed') && (
         <Rover
           ref={roverRef}
           getInput={getInput}
@@ -128,6 +129,7 @@ export default function SimulationApp() {
   const lastAiReasoningRef = useRef(""); // V0.8.23: Deduplication for terminal logs
   const lastAiLogTimeRef = useRef(0);    // V0.8.26: Frequency control
   const [currentLatency, setCurrentLatency] = useState(1000); // V0.9.25: Dynamic RTT tracking in ms
+  const lastAiSourceRef = useRef(null); // V0.9.46: Track AI vs Core driver for logging
 
   // V16: MANUAL INTENT PLANNING - Only calculate when user asks
   const triggerAiPlanning = useCallback(async () => {
@@ -408,13 +410,26 @@ export default function SimulationApp() {
     const loop = (t) => {
       const dt = (t - lastTimeRef.current) / 1000;
       lastTimeRef.current = t;
+
+      // ROLLOVER CHECK (Must be outside simulationState guard to catch physics updates)
+      const isRollover = Math.abs(telemetry.roll) >= ROLLOVER_ANGLE || Math.abs(telemetry.pitch) >= ROLLOVER_ANGLE;
+
       if (state.simulationState === 'running' && !isAiPlanning) {
         elapsedRef.current += dt;
         batteryRef.current = Math.max(0, batteryRef.current - dt * 0.05);
-        const [dx, dy, dz] = [telemetry.position[0] - terrainData.beacon.x, telemetry.position[1] - terrainData.beacon.y, telemetry.position[2] - terrainData.beacon.z];
-        const currentDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (currentDist < 3 && state.simulationState === 'running') dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'success' } });
-        if (batteryRef.current <= 0) dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'gameover', reason: 'damage' } });
+        const dist = Math.sqrt(
+          Math.pow(telemetry.position[0] - terrainData.beacon.x, 2) +
+          Math.pow(telemetry.position[2] - terrainData.beacon.z, 2)
+        );
+        dispatch({ type: 'SET_TARGET_DISTANCE', payload: dist });
+
+        if (isRollover && state.simulationState === 'running') {
+          dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'failed', reason: 'stability' } });
+        } else if (dist < state.arrivalAccuracy && state.simulationState === 'running') {
+          dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'success' } });
+        } else if (batteryRef.current <= 0 && state.simulationState === 'running') {
+          dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'failed', reason: 'damage' } });
+        }
 
         // V0.8.34: REAL-TIME LIDAR SCAN (Visual Feed)
         if (state.navigationOverlay || state.driveMode === DRIVE_MODES.AUTOPILOT) {
@@ -497,20 +512,25 @@ export default function SimulationApp() {
           position: telemetryRef.current.position,
           velocity: telemetryRef.current.velocity,
           rotation: telemetryRef.current.rotation,
-          relBearing: predictedBearing, // AI gets predicted future state
-          realTimeBearing: realTimeBearing, // Heuristic gets current state
+          relBearing: predictedBearing,
+          realTimeBearing: realTimeBearing,
           targetDistance: targetDistance,
           wheelsOnGround: telemetryRef.current.wheelsOnGround,
           targetPos: [terrainData.beacon.x, terrainData.beacon.z],
           terrainData: terrainData,
           commandHistory: lastAiCommandsRef.current,
-          latency: currentLatency
+          latency: currentLatency,
+          // V0.9.46: Sensor Toggles & Data
+          useMonteCarlo: state.aiUseMonteCarlo,
+          usePath: state.aiUsePath,
+          mcSummary: state.monteCarloResults ? summarizeFan(state.monteCarloResults.trajectories) : "Calculating...",
+          currentPathWaypoints: waypoints && waypoints.length > 0 ? `Next WP: [${f1(waypoints[0][0])}, ${f1(waypoints[0][1])}]` : "No Path"
         };
 
         // AI Autopilot Logic (Call GEMINI only if not busy)
         if (state.apiKey && !isAiAutopilotRunningRef.current) {
           isAiAutopilotRunningRef.current = true;
-          const aiStartTime = performance.now(); // Start measure
+          const aiStartTime = performance.now();
           getAutopilotCommand(state.apiKey, aiState, state.aiModel)
             .then(cmd => {
               const rtt = Math.round(performance.now() - aiStartTime);
@@ -557,6 +577,10 @@ export default function SimulationApp() {
         if (state.apiKey && aiCommandRef.current && aiCommandRef.current.reasoning && !aiCommandRef.current.reasoning.includes("AUTOPILOT_FATAL") && !isStale) {
           cmd = aiCommandRef.current;
           inputRef.current.brake = false;
+          if (lastAiSourceRef.current !== 'ai') {
+            dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: AI_LINK_ESTABLISHED. TACTICAL AUTOPILOT ENGAGED.", type: 'info' } });
+            lastAiSourceRef.current = 'ai';
+          }
         } else {
           // V0.9.42: ALWAYS USE REAL-TIME BEARING FOR LOCAL DRIVER
           const localAiState = { ...aiState, relBearing: realTimeBearing };
@@ -566,6 +590,13 @@ export default function SimulationApp() {
             cmd.throttle *= 0.3;
             cmd.reasoning = `LATENCY_LOCK: ${currentLatency}ms. Local safety driver engaged.`;
           }
+
+          if (lastAiSourceRef.current !== 'core') {
+            const reason = !state.apiKey ? "NO_API_KEY" : (isStale ? "LATENCY_CRITICAL" : "AI_STALLED");
+            dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: AI_LINK_LOST (${reason}). UNSEEN CORE (DIGITAL TWIN) ACTIVATED.`, type: 'warning' } });
+            lastAiSourceRef.current = 'core';
+          }
+
           inputRef.current.brake = false;
         }
 
@@ -589,6 +620,12 @@ export default function SimulationApp() {
 
   useEffect(() => {
     inputRef.current = { forward: 0, backward: 0, left: 0, right: 0, brake: false };
+
+    // V0.9.46: Log deactivation and reset tracking
+    if (state.driveMode === DRIVE_MODES.MANUAL && lastAiSourceRef.current === 'core') {
+      dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: UNSEEN CORE (DIGITAL TWIN) DEACTIVATED.", type: 'info' } });
+    }
+    lastAiSourceRef.current = null;
   }, [state.driveMode]);
 
   useEffect(() => {
@@ -716,51 +753,68 @@ export default function SimulationApp() {
             {state.chromaticAberration && <EffectComposer><ChromaticAberration offset={[0.00035, 0.00035]} /></EffectComposer>}
           </Canvas>
           <HUD
-            telemetry={{
-              speed: telemetry.speed,
-              pitch: telemetry.pitch,
-              roll: telemetry.roll,
-              battery: batteryRef.current
-            }}
+            speed={telemetry.speed}
+            pitch={telemetry.pitch}
+            roll={telemetry.roll}
+            battery={state.battery}
             targetDistance={targetDistance}
+            elapsedTime={state.elapsedTime || elapsedRef.current}
             driveMode={state.driveMode}
-            aiQuote={aiQuote}
-            simulationState={state.simulationState}
-            isAiPlanning={isAiPlanning}
-            isMcCalculating={isMcCalculating}
-            riskMetrics={riskMetrics}
-            apiKey={state.apiKey}
-            onApiKeyChange={(key) => dispatch({ type: 'SET_API_KEY', payload: key })}
-            aiModel={state.aiModel}
-            onAiModelChange={(model) => dispatch({ type: 'SET_AI_MODEL', payload: model })}
-            failReason={state.failReason}
-            safetyScore={Math.max(0, Math.round(100 - elapsedRef.current * 0.1 - Math.abs(parseFloat(telemetry.pitch)) * 0.5))}
-            elapsedTime={elapsedRef.current}
             language={state.language}
-            isMobile={isMobile}
-            onSetDriveMode={(mode) => {
-              if (mode === DRIVE_MODES.AUTOPILOT && waypoints.length === 0) triggerAiPlanning();
-              dispatch({ type: 'SET_DRIVE_MODE', payload: mode });
+            simulationState={state.simulationState}
+            failReason={state.failReason}
+            navigationOverlay={state.navigationOverlay}
+            safetyScore={state.safetyScore}
+            isAiOnline={!!state.apiKey}
+            isAiPlanning={isAiPlanning}
+            isMcCalculating={state.monteCarloResults?.recalculating}
+            aiQuote={aiQuote}
+            onSetDriveMode={(mode) => dispatch({ type: 'SET_DRIVE_MODE', payload: mode })}
+            onToggleNav={() => {
+              const prevOverlay = state.navigationOverlay;
+              dispatch({ type: 'TOGGLE_NAV_OVERLAY' });
+              // V0.9.47: AUTO-PLAN ON OVERLAY (If no route exists)
+              if (!prevOverlay && waypoints.length === 0 && !isAiPlanning && state.apiKey) {
+                triggerAiPlanning();
+              }
             }}
+            onPlanRoute={handlePlanRoute}
+            onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
             onNewTerrain={handleNewTerrain}
             onRestart={handleRestart}
-            onToggleCalibration={handleToggleCalibration}
-            onLanguageChange={(l) => dispatch({ type: 'SET_LANGUAGE', payload: l })}
+            onTelemetryUpdate={setTelemetry}
+            telemetry={telemetry}
+            riskMetrics={riskMetrics}
             brightness={state.brightness}
             onBrightnessChange={(val) => dispatch({ type: 'SET_BRIGHTNESS', payload: val })}
             shadowContrast={state.shadowContrast}
-            onShadowChange={(val) => dispatch({ type: 'SET_SHADOW_CONTRAST', payload: val })}
+            onShadowChange={(val) => dispatch({ type: 'SET_SHADOWS', payload: val })}
             chromaticAberration={state.chromaticAberration}
             onChromaticToggle={() => dispatch({ type: 'TOGGLE_CHROMATIC' })}
+            apiKey={state.apiKey}
+            onApiKeyChange={(val) => { localStorage.setItem('pathfinder_api_key', val); dispatch({ type: 'SET_API_KEY', payload: val }); }}
+            aiModel={state.aiModel}
+            onAiModelChange={(val) => dispatch({ type: 'SET_AI_MODEL', payload: val })}
+            waypointCount={state.waypointCount}
+            onWaypointCountChange={(val) => dispatch({ type: 'SET_WAYPOINT_COUNT', payload: val })}
+            onToggleCalibration={() => dispatch({ type: 'TOGGLE_CALIBRATION' })}
+            uiVisible={state.uiVisible}
+            onToggleUI={() => dispatch({ type: 'TOGGLE_UI' })}
+            arrivalAccuracy={state.arrivalAccuracy}
+            onAccuracyChange={(val) => dispatch({ type: 'SET_ARRIVAL_ACCURACY', payload: val })}
+            aiUseMonteCarlo={state.aiUseMonteCarlo}
+            onAiUseMcToggle={(val) => dispatch({ type: 'SET_AI_USE_MC', payload: val })}
+            aiUsePath={state.aiUsePath}
+            onAiUsePathToggle={(val) => dispatch({ type: 'SET_AI_USE_PATH', payload: val })}
+            helpOpen={state.helpOpen}
+            onToggleHelp={() => dispatch({ type: 'TOGGLE_HELP' })}
             onMobileInput={(inp) => {
               if (inp.toggleAutopilot) {
                 dispatch({ type: 'TOGGLE_AUTOPILOT' });
                 if (state.driveMode === DRIVE_MODES.MANUAL) triggerAiPlanning();
               } else if (inp.toggleNav) {
                 dispatch({ type: 'TOGGLE_NAV_OVERLAY' });
-                // Mobile: Visual toggle only
               } else {
-                // V0.8.24: JOYSTICK OVERRIDE
                 if (state.driveMode === DRIVE_MODES.AUTOPILOT && (inp.forward > 0 || inp.backward > 0 || inp.left !== 0 || inp.right !== 0)) {
                   dispatch({ type: 'SET_DRIVE_MODE', payload: DRIVE_MODES.MANUAL });
                   dispatch({ type: 'ADD_LOG', payload: { text: "MODE: MANUAL OVERRIDE (JOYSTICK)", type: 'warning' } });
@@ -768,16 +822,7 @@ export default function SimulationApp() {
                 inputRef.current = { ...inputRef.current, ...inp };
               }
             }}
-            isAiOnline={!!state.apiKey}
-            navigationOverlay={state.navigationOverlay}
-            onToggleNav={() => {
-              if (!state.navigationOverlay && waypoints.length === 0) triggerAiPlanning();
-              dispatch({ type: 'TOGGLE_NAV_OVERLAY' });
-            }}
-            onPlanRoute={handlePlanRoute}
-            waypointCount={state.waypointCount}
-            onWaypointCountChange={(val) => dispatch({ type: 'SET_WAYPOINT_COUNT', payload: val })}
-            lidarScan={lidarScan}
+            isMobile={isMobile}
           />
         </div>
       </SimulationDispatchContext.Provider>

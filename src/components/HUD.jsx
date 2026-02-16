@@ -1,5 +1,5 @@
 // components/HUD.jsx — Sci-Fi HUD overlay (NVIDIA Drive / SpaceX Dragon style)
-import React, { useState, useCallback, useRef, memo } from 'react';
+import React, { useState, useCallback, useRef, memo, useEffect } from 'react';
 import { STRINGS } from '../i18n';
 import { COLORS as C, WARNING_ANGLE, VERSION, useSimulationState } from '../store';
 import TerminalPanel from './TerminalPanel';
@@ -27,7 +27,7 @@ function BatteryBar({ value }) {
 }
 
 // Telemetry panel (Top Left)
-function TelemetryPanel({ telemetry, lang, style }) {
+function TelemetryPanel({ telemetry, lang, navigationOverlay, style, onToggleHelp }) {
     const t = STRINGS[lang];
     const pitchVal = parseFloat(telemetry.pitch) || 0;
     const rollVal = parseFloat(telemetry.roll) || 0;
@@ -37,8 +37,18 @@ function TelemetryPanel({ telemetry, lang, style }) {
     return (
         <CornerBrackets className="panel-telemetry" style={style}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(0, 255, 255, 0.3)', paddingBottom: '5px', minHeight: '28px' }}>
+                <button
+                    onClick={onToggleHelp}
+                    className="help-icon-btn"
+                    title={t.help}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="i-svg-icon">
+                        <circle cx="12" cy="12" r="10" opacity="0.4" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                </button>
                 <h2 className="panel-title" style={{ margin: 0, border: 'none', padding: 0 }}>{t.telemetry}</h2>
-                <div style={{ width: '30px' }}></div>
             </div>
             <div className="telemetry-row">
                 <span className="label">{t.speed}:</span>
@@ -49,26 +59,26 @@ function TelemetryPanel({ telemetry, lang, style }) {
             <div className="telemetry-row">
                 <span className="label">{t.pitch}:</span>
                 <span className="value" style={{ color: pitchColor }}>
-                    {telemetry.pitch || '0.0'}°
+                    {pitchVal.toFixed(1)}°
                 </span>
             </div>
             <div className="telemetry-row">
                 <span className="label">{t.roll}:</span>
                 <span className="value" style={{ color: rollColor }}>
-                    {telemetry.roll || '0.0'}°
+                    {rollVal.toFixed(1)}°
                 </span>
             </div>
             <div className="telemetry-row">
                 <span className="label">{t.battery}:</span>
                 <BatteryBar value={telemetry.battery || 100} />
             </div>
-            {telemetry.sCVaR !== undefined && (
+            {navigationOverlay && telemetry.sCVaR !== undefined && (
                 <div className="telemetry-row" style={{ marginTop: '5px', borderTop: '1px solid rgba(0, 255, 255, 0.2)', paddingTop: '5px' }}>
-                    <span className="label">sCVaR:</span>
+                    <span className="label">sCVaR_α:</span>
                     <span className="value" style={{
-                        color: telemetry.sCVaR > 50 ? C.CRITICAL_PATH : telemetry.sCVaR > 30 ? C.WARNING_PATH : C.SAFE_PATH
+                        color: telemetry.sCVaR > 0.8 ? C.CRITICAL_PATH : telemetry.sCVaR > 0.4 ? C.WARNING_PATH : C.SAFE_PATH
                     }}>
-                        {parseFloat(telemetry.sCVaR).toFixed(1)} u
+                        {parseFloat(telemetry.sCVaR).toFixed(2)}
                     </span>
                 </div>
             )}
@@ -76,9 +86,11 @@ function TelemetryPanel({ telemetry, lang, style }) {
     );
 }
 
-// Mission Control panel (Top Right)
-function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, telemetry, style }) {
+// Mission Panel (Top Right)
+function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, telemetry, navigationOverlay, style }) {
     const t = STRINGS[lang];
+    const sMar = parseFloat(telemetry.SMaR) || 0;
+    const sMarColor = sMar > 0.8 ? C.CRITICAL_PATH : sMar > 0.4 ? C.WARNING_PATH : C.SAFE_PATH;
 
     return (
         <CornerBrackets className="panel-mission" style={style}>
@@ -87,36 +99,31 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
                 <button
                     onClick={onOpenSettings}
                     style={{
-                        background: 'none', border: 'none', color: 'rgba(0, 255, 255, 0.7)', fontSize: '20px', cursor: 'pointer', padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        background: 'none', border: 'none', color: 'rgba(0, 255, 255, 0.7)', fontSize: '20px', cursor: 'pointer', padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto'
                     }}
                 >
                     ⚙
                 </button>
             </div>
-
-            <div className="telemetry-row">
-                <span className="label">{t.time}:</span>
-                <span className="value" style={{ color: C.PRIMARY_INFO }}>
-                    {elapsedTime.toFixed(1)}s
-                </span>
-            </div>
             <div className="telemetry-row">
                 <span className="label">{t.target}:</span>
-                <span className="value" style={{ color: C.SAFE_PATH }}>
-                    {targetDistance.toFixed(0)} {t.meters}
-                </span>
+                <span className="value" style={{ color: '#00FF41' }}>{Math.round(targetDistance || 0)}{t.meters}</span>
             </div>
-            {telemetry && telemetry.SMaR !== undefined && (
-                <div className="telemetry-row">
-                    <span className="label">SMaR:</span>
-                    <span className="value" style={{
-                        color: telemetry.SMaR < 10 ? C.CRITICAL_PATH : telemetry.SMaR < 25 ? C.WARNING_PATH : C.SAFE_PATH
-                    }}>
-                        {parseFloat(telemetry.SMaR).toFixed(1)} m
-                    </span>
+            <div className="telemetry-row">
+                <span className="label">{t.time}:</span>
+                <span className="value">{Math.floor(elapsedTime || 0)}s</span>
+            </div>
+            {navigationOverlay && (
+                <div className="telemetry-row" style={{ marginTop: '5px', borderTop: '1px solid rgba(0, 255, 255, 0.1)', paddingTop: '5px' }}>
+                    <span className="label">SMaR_α:</span>
+                    <span className="value" style={{ color: sMarColor }}>{sMar.toFixed(2)}</span>
                 </div>
             )}
-            <button className="hud-button" onClick={onNewTerrain}>
+            <button
+                className="hud-button"
+                style={{ width: '100%', marginTop: '15px' }}
+                onClick={onNewTerrain}
+            >
                 <span className="btn-bracket">[</span>
                 {t.generateNewLandscape}
                 <span className="btn-bracket">]</span>
@@ -126,7 +133,7 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
 }
 
 // Bottom Control Panel
-function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, navigationOverlay, onToggleNav, onPlanRoute, isAiOnline, isAiPlanning, isMcCalculating, aiQuote }) {
+function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, failReason, navigationOverlay, onToggleNav, onPlanRoute, isAiOnline, isAiPlanning, isMcCalculating, aiQuote }) {
     const { terminalOpen } = useSimulationState();
     const t = STRINGS[lang];
 
@@ -141,54 +148,56 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, naviga
             textAlign: 'center',
             padding: '10px 24px',
             zIndex: 90,
-            transition: 'transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)'
+            transition: 'transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)',
+            pointerEvents: 'auto'
         }}>
 
-            {simulationState === 'running' && (
-                <>
-                    <div className="ai-status" style={{ marginBottom: '12px', minHeight: '16px' }}>
-                        {isAiPlanning ? (
-                            <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.planning}</span>
-                        ) : (navigationOverlay || driveMode === 'autopilot') ? (
-                            <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.recalculating}</span>
-                        ) : !navigationOverlay && driveMode === 'manual' ? (
-                            <span className="ai-prompt" style={{ fontSize: '11px' }}>{t.navigatePrompt}</span>
-                        ) : null}
-                    </div>
+            <div className="ai-status" style={{ marginBottom: '12px', minHeight: '16px' }}>
+                {isAiPlanning ? (
+                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.planning}</span>
+                ) : (navigationOverlay || driveMode === 'autopilot') ? (
+                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.recalculating}</span>
+                ) : !navigationOverlay && driveMode === 'manual' ? (
+                    <span className="ai-prompt" style={{ fontSize: '11px' }}>{t.navigatePrompt}</span>
+                ) : null}
+            </div>
 
-                    <div className="mode-selector" style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                            className={`mode-btn ${driveMode === 'autopilot' ? 'active-autopilot pulse' : ''}`}
-                            onClick={() => onSetDriveMode(driveMode === 'autopilot' ? 'manual' : 'autopilot')}
-                            style={{ flex: 0.618 }}
-                        >
-                            <div className="inner-frame" />
-                            <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>{t.driveMode}</span>
-                            {driveMode === 'autopilot' ? t.autopilot : t.manual}
-                        </button>
+            <div className="mode-selector" style={{ display: 'flex', gap: '10px' }}>
+                <button
+                    className={`mode-btn ${driveMode === 'autopilot' ? 'active-autopilot pulse' : ''}`}
+                    onClick={() => onSetDriveMode(driveMode === 'autopilot' ? 'manual' : 'autopilot')}
+                    style={{ flex: 0.618 }}
+                    disabled={simulationState !== 'running'}
+                >
+                    <div className="inner-frame" />
+                    <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>{t.driveMode}</span>
+                    {driveMode === 'autopilot' ? t.autopilot : t.manual}
+                </button>
 
-                        <button
-                            className={`mode-btn ${navigationOverlay ? 'active-overlay' : ''}`}
-                            onClick={onToggleNav}
-                            style={{ flex: 0.382 }}
-                        >
-                            <div className="inner-frame" />
-                            <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>OVERLAY</span>
-                            {t.sensorData}
-                        </button>
-                    </div>
+                <button
+                    className={`mode-btn ${navigationOverlay ? 'active-overlay' : ''}`}
+                    onClick={(e) => {
+                        console.log("[UI] Overlay Toggle Clicked. Current state:", navigationOverlay);
+                        onToggleNav();
+                    }}
+                    style={{ flex: 0.382, pointerEvents: 'auto' }}
+                    disabled={simulationState !== 'running'}
+                >
+                    <div className="inner-frame" />
+                    <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>OVERLAY</span>
+                    {t.sensorData}
+                </button>
+            </div>
 
-                    {aiQuote && (
-                        <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(0, 255, 255, 0.05)', borderLeft: '2px solid #00FFFF', fontFamily: 'monospace', fontSize: '11px', color: '#00FFFF', fontStyle: 'italic', lineHeight: '1.4' }}>
-                            {`"${aiQuote}"`}
-                        </div>
-                    )}
-
-                    <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0, 255, 255, 0.15)', paddingTop: '8px' }}>
-                        <ControlsHint lang={lang} />
-                    </div>
-                </>
+            {aiQuote && (
+                <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(0, 255, 255, 0.05)', borderLeft: '2px solid #00FFFF', fontFamily: 'monospace', fontSize: '11px', color: '#00FFFF', fontStyle: 'italic', lineHeight: '1.4' }}>
+                    {`"${aiQuote}"`}
+                </div>
             )}
+
+            <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0, 255, 255, 0.15)', paddingTop: '8px' }}>
+                <ControlsHint lang={lang} />
+            </div>
         </CornerBrackets>
     );
 }
@@ -196,22 +205,21 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, naviga
 // Outcome Overlay
 function OutcomeOverlay({ reason, lang, onRestart, onNewTerrain, safetyScore, elapsedTime }) {
     const t = STRINGS[lang];
-    const { totalCrashes } = useSimulationState();
     const isSuccess = reason === 'success';
 
     return (
-        <div className="outcome-overlay">
+        <div className="outcome-overlay" style={{ pointerEvents: 'auto', zIndex: 999999 }}>
             <CornerBrackets className="outcome-panel">
                 <h1 className={`outcome-title ${isSuccess ? 'success' : 'fail'}`}>
                     {isSuccess ? 'MISSION SUCCESS' : 'MISSION TERMINATED'}
                 </h1>
                 <div className="outcome-details">
-                    <div className="detail-row"><span>{t.time}:</span> <span>{Math.floor(elapsedTime)}s</span></div>
+                    <div className="detail-row"><span>{t.time}:</span> <span>{Math.floor(elapsedTime || 0)}s</span></div>
                     <div className="detail-row"><span>{t.safetyScore}:</span> <span>{safetyScore}/100</span></div>
                     {!isSuccess && <div className="detail-row" style={{ color: '#FF0055' }}><span>STATUS:</span> <span>STABILITY BREACH - ROVER LOST</span></div>}
                 </div>
                 <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                    <button className="hud-button" style={{ flex: 1 }} onClick={onNewTerrain}>{t.generateNewLandscape}</button>
+                    <button className="hud-button" style={{ flex: 1 }} onClick={onRestart}>{t.restartMission || 'RESTART MISSION'}</button>
                 </div>
             </CornerBrackets>
         </div>
@@ -221,15 +229,14 @@ function OutcomeOverlay({ reason, lang, onRestart, onNewTerrain, safetyScore, el
 // V0.8.34: Lidar Visualization Panel
 function LidarPanel({ data, lang }) {
     const t = STRINGS[lang];
-    // Data is a string like: "\n- 0°: 5m:[+0.1m] 10m:[-0.5m] ..."
-    // We'll parse it into a structured array
     const lines = data.split('\n').filter(l => l.includes('°'));
     const sectors = lines.map(line => {
-        const angle = line.match(/(\d+)°/)[1];
-        const m5 = line.match(/5m:\[([^\]]+)\]/)[1];
-        const m10 = line.match(/10m:\[([^\]]+)\]/)[1];
-        return { angle, m5, m10 };
-    });
+        const angleMatch = line.match(/(\d+)°/);
+        const m5Match = line.match(/5m:\[([^\]]+)\]/);
+        const m10Match = line.match(/10m:\[([^\]]+)\]/);
+        if (!angleMatch || !m5Match || !m10Match) return null;
+        return { angle: angleMatch[1], m5: m5Match[1], m10: m10Match[1] };
+    }).filter(s => s !== null);
 
     return (
         <div className="lidar-panel">
@@ -245,21 +252,20 @@ function LidarPanel({ data, lang }) {
                     </div>
                     {sectors.map((s, i) => {
                         const deg = parseInt(s.angle);
-                        const rad = (deg - 90) * (Math.PI / 180); // Adjust for CSS rotation
+                        const rad = (deg - 90) * (Math.PI / 180);
                         const x = Math.cos(rad);
                         const y = Math.sin(rad);
 
                         const getIntensity = (val) => {
                             if (val === 'VOID') return '#333';
                             const v = parseFloat(val);
-                            if (Math.abs(v) > 2) return '#FF0055'; // Danger (Steep)
-                            if (Math.abs(v) > 0.8) return '#FFBF00'; // Warning (Slope)
-                            return '#00FF41'; // Safe
+                            if (Math.abs(v) > 2) return '#FF0055';
+                            if (Math.abs(v) > 0.8) return '#FFBF00';
+                            return '#00FF41';
                         };
 
                         return (
                             <React.Fragment key={s.angle}>
-                                {/* 5m point */}
                                 <div className="radar-point p5" style={{
                                     left: `calc(50% + ${x * 25}%)`,
                                     top: `calc(50% + ${y * 25}%)`,
@@ -267,7 +273,6 @@ function LidarPanel({ data, lang }) {
                                 }}>
                                     <span className="tooltip">{s.m5}</span>
                                 </div>
-                                {/* 10m point */}
                                 <div className="radar-point p10" style={{
                                     left: `calc(50% + ${x * 45}%)`,
                                     top: `calc(50% + ${y * 45}%)`,
@@ -279,25 +284,37 @@ function LidarPanel({ data, lang }) {
                         );
                     })}
                 </div>
-                <div className="lidar-legend">
-                    <div className="legend-item"><div className="dot" style={{ background: '#00FF41' }} /> {t.safe}</div>
-                    <div className="legend-item"><div className="dot" style={{ background: '#FFBF00' }} /> {t.warning}</div>
-                    <div className="legend-item"><div className="dot" style={{ background: '#FF0055' }} /> {t.critical}</div>
-                </div>
             </CornerBrackets>
         </div>
     );
 }
 
 // Settings Modal
-function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle, apiKey, onApiKeyChange, aiModel, onAiModelChange, waypointCount, onWaypointCountChange, onToggleCalibration }) {
+function SettingsModal({
+    isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange,
+    chromaticAberration, onChromaticToggle, apiKey, onApiKeyChange, aiModel, onAiModelChange,
+    waypointCount, onWaypointCountChange, onToggleCalibration,
+    arrivalAccuracy, onAccuracyChange, aiUseMonteCarlo, onAiUseMcToggle, aiUsePath, onAiUsePathToggle
+}) {
     if (!isOpen) return null;
     const { isCalibrationMode } = useSimulationState();
     const t = STRINGS[lang];
     const [localBrightness, setLocalBrightness] = React.useState(brightness || 1.2);
     React.useEffect(() => { setLocalBrightness(brightness || 1.2); }, [brightness]);
-    const handleSliderChange = (e) => { const val = parseFloat(e.target.value); setLocalBrightness(val); onBrightnessChange(val); };
-    const handleReset = () => { const defaultBrightness = 1.2, defaultShadow = 0.5; setLocalBrightness(defaultBrightness); onBrightnessChange(defaultBrightness); onShadowChange(defaultShadow); if (chromaticAberration) onChromaticToggle(); };
+
+    const handleSliderChange = (e) => {
+        const val = parseFloat(e.target.value);
+        setLocalBrightness(val);
+        onBrightnessChange(val);
+    };
+
+    const handleReset = () => {
+        const defaultBrightness = 1.2, defaultShadow = 0.5;
+        setLocalBrightness(defaultBrightness);
+        onBrightnessChange(defaultBrightness);
+        onShadowChange(defaultShadow);
+        if (chromaticAberration) onChromaticToggle();
+    };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -317,9 +334,6 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
                     >
                         {isCalibrationMode ? "EXIT CALIBRATION (RETURN TO MOON)" : "ENTER CALIBRATION (FLAT PLANE)"}
                     </button>
-                    <span style={{ fontSize: '9px', opacity: 0.6, marginTop: '4px', display: 'block' }}>
-                        * Resets mission on an ideal 0-height surface for navigation testing.
-                    </span>
                 </div>
                 <div className="settings-row">
                     <span className="label">{t.brightness}:</span>
@@ -346,11 +360,7 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
                             <button
                                 key={cnt}
                                 className={`hud-button ${waypointCount === cnt ? 'active' : ''}`}
-                                style={{
-                                    flex: 1,
-                                    margin: 0,
-                                    fontSize: '10px'
-                                }}
+                                style={{ flex: 1, margin: 0, fontSize: '10px' }}
                                 onClick={() => onWaypointCountChange(cnt)}
                             >
                                 {cnt === 7 ? `${t.low} (7)` : cnt === 15 ? `${t.med} (15)` : `${t.ultra} (25)`}
@@ -359,21 +369,64 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
                     </div>
                 </div>
                 <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.accuracy}:</span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {[15.0, 5.0, 1.5].map(acc => (
+                            <button
+                                key={acc}
+                                className={`hud-button ${arrivalAccuracy === acc ? 'active' : ''}`}
+                                style={{ flex: 1, margin: 0, fontSize: '10px' }}
+                                onClick={() => onAccuracyChange(acc)}
+                            >
+                                {acc === 15.0 ? t.easy : acc === 5.0 ? t.normal : t.hard} ({acc}m)
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI INTELLIGENCE:</span>
+                    <button
+                        className={`hud-button ${aiUseMonteCarlo ? 'active' : ''}`}
+                        style={{ width: '100%', marginBottom: '8px' }}
+                        onClick={() => onAiUseMcToggle(!aiUseMonteCarlo)}
+                    >
+                        {t.useMonteCarlo}
+                    </button>
+                    <button
+                        className={`hud-button ${aiUsePath ? 'active' : ''}`}
+                        style={{ width: '100%' }}
+                        onClick={() => onAiUsePathToggle(!aiUsePath)}
+                    >
+                        {t.usePlannedPath}
+                    </button>
+                </div>
+
+                <div className="settings-row" style={{ display: 'block' }}>
                     <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.aiModelIdentity}:</span>
-                    <select value={apiKey && apiKey.startsWith('http') ? 'custom' : (aiModel || 'gemini-3-flash-preview')} onChange={(e) => onAiModelChange(e.target.value)} style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer' }}>
+                    <select
+                        value={aiModel || 'gemini-3-flash-preview'}
+                        onChange={(e) => onAiModelChange(e.target.value)}
+                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer' }}
+                    >
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
                         <option value="cosmos-reasoning">NVIDIA Cosmos</option>
                     </select>
                 </div>
+
                 <div className="settings-row" style={{ display: 'block' }}>
                     <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>
                         {aiModel === 'cosmos-reasoning' ? `${t.cosmosEndpoint}:` : `${t.geminiApiKey}:`}
                     </span>
-                    <input type="password" value={apiKey || ''} onChange={(e) => onApiKeyChange(e.target.value)} placeholder={aiModel === 'cosmos-reasoning' ? "https://..." : "Enter Key..."} style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
+                    <input
+                        type="password"
+                        value={apiKey || ''}
+                        onChange={(e) => onApiKeyChange(e.target.value)}
+                        placeholder={aiModel === 'cosmos-reasoning' ? "https://..." : "Enter Key..."}
+                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }}
+                        onPointerDownCapture={(e) => { e.stopPropagation(); }}
+                    />
                 </div>
-                <div style={{ marginTop: '10px', marginBottom: '20px' }}>
-                    <button className="hud-button" style={{ width: '100%', borderColor: '#FFBF00', color: '#FFBF00', fontSize: '11px' }} onClick={handleReset}>{t.resetGraphics}</button>
-                </div>
+
                 <div className="settings-row">
                     <span className="label">{t.language}:</span>
                     <div className="language-selector">{['EN', 'RU', 'UA'].map((l) => (<button key={l} className={`lang-btn ${lang === l ? 'active' : ''}`} onClick={() => onLanguageChange(l)}>{l}</button>))}</div>
@@ -384,8 +437,9 @@ function SettingsModal({ isOpen, onClose, lang, onLanguageChange, brightness, on
     );
 }
 
-function TopLogos({ aiModel }) {
+function TopLogos({ aiModel, uiVisible }) {
     const { terminalOpen } = useSimulationState();
+    if (!uiVisible) return null;
     const isGemini = aiModel && (aiModel.includes('gemini') || aiModel === 'gemini-3-flash-preview');
     const partnerLogo = isGemini ? "/gemini-color.svg" : "/Nvidia_logo_.svg";
 
@@ -399,6 +453,29 @@ function TopLogos({ aiModel }) {
     );
 }
 
+function HelpModal({ isOpen, onClose, lang }) {
+    if (!isOpen) return null;
+    const t = STRINGS[lang].helpContent;
+    const st = STRINGS[lang];
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <CornerBrackets className="settings-panel help-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                <h2 className="panel-title">{t.title}</h2>
+                <div className="help-content-scroll">
+                    <p style={{ color: '#00FFFF', fontWeight: 'bold', marginBottom: '15px', fontSize: '12px' }}>{t.concept}</p>
+                    <ul style={{ listStyle: 'none', padding: 0 }}>
+                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#00FF41', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>MANUAL NAVIGATION</span> {t.manual}</li>
+                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#00FFFF', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>TACTICAL AUTOPILOT</span> {t.ai}</li>
+                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#FFBF00', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>UNSEEN CORE (DIGITAL TWIN)</span> {t.core}</li>
+                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#888', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>MISSION PARAMETERS</span> {t.settings}</li>
+                    </ul>
+                </div>
+                <button className="hud-button close-btn" onClick={onClose} style={{ marginTop: '15px' }}><span className="btn-bracket">[</span>{st.close}<span className="btn-bracket">]</span></button>
+            </CornerBrackets>
+        </div>
+    );
+}
+
 function ControlsHint({ lang }) { const t = STRINGS[lang]; return <div className="controls-hint">{t.controls}</div>; }
 function MobileControls({ onInputChange, onPlanRoute }) {
     const joystickRef = useRef(null);
@@ -407,7 +484,6 @@ function MobileControls({ onInputChange, onPlanRoute }) {
     const isActive = useRef(false);
 
     const handleTouchStart = useCallback((e) => {
-        // e.preventDefault();
         const touch = e.touches[0];
         const rect = joystickRef.current.getBoundingClientRect();
         touchStartPos.current = {
@@ -418,56 +494,28 @@ function MobileControls({ onInputChange, onPlanRoute }) {
     }, []);
 
     const handleTouchMove = useCallback((e) => {
-        // e.preventDefault();
         if (!isActive.current) return;
         const touch = e.touches[0];
         const dx = (touch.clientX - touchStartPos.current.x) / 50;
         const dy = (touch.clientY - touchStartPos.current.y) / 50;
-
         const clamp = (v) => Math.max(-1, Math.min(1, v));
-        const left = clamp(-dx) > 0 ? clamp(-dx) : 0;
-        const right = clamp(dx) > 0 ? clamp(dx) : 0;
-        const forward = clamp(-dy) > 0 ? clamp(-dy) : 0;
-        const backward = clamp(dy) > 0 ? clamp(dy) : 0;
-
-        onInputChange({ forward, backward, left, right });
-
+        onInputChange({ forward: clamp(-dy) > 0 ? clamp(-dy) : 0, backward: clamp(dy) > 0 ? clamp(dy) : 0, left: clamp(-dx) > 0 ? clamp(-dx) : 0, right: clamp(dx) > 0 ? clamp(dx) : 0 });
         if (knobRef.current) {
             const maxDist = 40;
-            const kx = Math.max(-maxDist, Math.min(maxDist, dx * 30));
-            const ky = Math.max(-maxDist, Math.min(maxDist, dy * 30));
-            knobRef.current.style.transform = `translate(${kx}px, ${ky}px)`;
+            knobRef.current.style.transform = `translate(${Math.max(-maxDist, Math.min(maxDist, dx * 30))}px, ${Math.max(-maxDist, Math.min(maxDist, dy * 30))}px)`;
         }
     }, [onInputChange]);
 
     const handleTouchEnd = useCallback(() => {
-        if (knobRef.current) {
-            knobRef.current.style.transform = 'translate(0, 0)';
-        }
+        if (knobRef.current) knobRef.current.style.transform = 'translate(0, 0)';
         isActive.current = false;
         onInputChange({ forward: 0, backward: 0, left: 0, right: 0 });
     }, [onInputChange]);
 
     return (
         <div className="mobile-controls">
-            <div
-                ref={joystickRef}
-                className="joystick-zone"
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-            >
-                <div className="joystick-base">
-                    <div ref={knobRef} className="joystick-knob" />
-                </div>
-            </div>
-            <button
-                className="mobile-brake-btn"
-                onTouchStart={(e) => { e.preventDefault(); onInputChange({ brake: true }); }}
-                onTouchEnd={(e) => { e.preventDefault(); onInputChange({ brake: false }); }}
-            >
-                BRAKE
-            </button>
+            <div ref={joystickRef} className="joystick-zone" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}><div className="joystick-base"><div ref={knobRef} className="joystick-knob" /></div></div>
+            <button className="mobile-brake-btn" onTouchStart={(e) => { e.preventDefault(); onInputChange({ brake: true }); }} onTouchEnd={(e) => { e.preventDefault(); onInputChange({ brake: false }); }}>BRAKE</button>
         </div>
     );
 }
@@ -482,71 +530,75 @@ export default function HUD(props) {
     } = props;
     const { terminalOpen } = useSimulationState();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-    const quoteHeaders = {
-        EN: "[AI CONNECTION VERIFIED] - STRATEGIC QUOTE:",
-        RU: "[ИИ ПОДКЛЮЧЕН] - СТРАТЕГИЧЕСКАЯ ЦИТАТА:",
-        UA: "[ШІ ПІДКЛЮЧЕНО] - СТРАТЕГІЧНА ЦИТАТА:"
-    };
-
+    const isVisible = props.uiVisible !== false;
     const hudShiftClass = (terminalOpen && !isMobile) ? 'terminal-visible' : '';
+    const visibilityClass = isVisible ? '' : 'hud-panels-hidden';
+    const t = STRINGS[language];
 
     return (
-        <div className={`hud-overlay ${hudShiftClass}`} style={{ pointerEvents: 'none' }}>
-            <TopLogos aiModel={aiModel} />
-            <TelemetryPanel telemetry={{ ...telemetry, sCVaR: riskMetrics?.sCVaR }} lang={language} />
+        <>
+            <div className={`hud-overlay ${hudShiftClass} ${visibilityClass}`} style={{ pointerEvents: 'none' }}>
+                <button
+                    className="cinematic-toggle"
+                    onClick={() => props.onToggleUI()}
+                    title={t.cinematicMode}
+                    style={{ position: 'fixed', left: '0', top: '50%', transform: 'translateY(-50%)', writingMode: 'vertical-rl', textOrientation: 'mixed', padding: '20px 6px', borderRadius: '0 4px 4px 0', height: 'auto', minHeight: '120px' }}
+                >
+                    {isVisible ? 'HIDE INTERFACE' : 'RESTORE HUD'}
+                </button>
 
-            <MissionPanel
-                targetDistance={targetDistance}
-                lang={language}
-                elapsedTime={elapsedTime}
-                onNewTerrain={onNewTerrain}
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                telemetry={{ SMaR: riskMetrics?.SMaR }}
-            />
+                <TopLogos aiModel={aiModel} uiVisible={isVisible} />
 
-            <ControlPanel
-                driveMode={driveMode}
-                lang={language}
-                onSetDriveMode={onSetDriveMode}
-                simulationState={simulationState}
-                navigationOverlay={navigationOverlay}
-                onToggleNav={onToggleNav}
-                onPlanRoute={onPlanRoute}
-                isAiOnline={isAiOnline}
-                isAiPlanning={isAiPlanning}
-                isMcCalculating={isMcCalculating}
-                aiQuote={aiQuote}
-            />
+                {isVisible && (
+                    <>
+                        <TelemetryPanel telemetry={{ ...telemetry, sCVaR: riskMetrics?.sCVaR }} lang={language} navigationOverlay={navigationOverlay} onToggleHelp={() => props.onToggleHelp()} />
+                        <MissionPanel targetDistance={targetDistance} lang={language} elapsedTime={elapsedTime} onNewTerrain={onNewTerrain} onOpenSettings={() => setIsSettingsOpen(true)} telemetry={{ SMaR: riskMetrics?.SMaR }} navigationOverlay={navigationOverlay} />
+                    </>
+                )}
 
-            <TerminalPanel />
+                <ControlPanel
+                    driveMode={driveMode} lang={language} onSetDriveMode={onSetDriveMode} simulationState={simulationState} failReason={failReason} navigationOverlay={navigationOverlay} onToggleNav={onToggleNav} onPlanRoute={onPlanRoute}
+                    isAiOnline={isAiOnline} isAiPlanning={isAiPlanning} isMcCalculating={isMcCalculating} aiQuote={aiQuote}
+                />
 
-            {(simulationState === 'success' || simulationState === 'gameover') && (
+                <TerminalPanel />
+
+                {(!isAiOnline && driveMode === 'autopilot') && (
+                    <div className="offline-warning-box unseen-core-active">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div className="core-icon-pulse" />
+                            <div>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '2px' }}>{STRINGS[language].unseenCore}:</span>
+                                <span style={{ marginLeft: '5px', opacity: 0.8 }}>{STRINGS[language].digitalTwin}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isMobile && simulationState === 'running' && (
+                    <MobileControls onInputChange={onMobileInput} onPlanRoute={onPlanRoute} />
+                )}
+
+                {lidarScan && isVisible && <LidarPanel data={lidarScan} lang={language} />}
+
+                <SettingsModal
+                    isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} lang={language} onLanguageChange={onLanguageChange} brightness={brightness} onBrightnessChange={onBrightnessChange}
+                    shadowContrast={shadowContrast} onShadowChange={onShadowChange} chromaticAberration={chromaticAberration} onChromaticToggle={onChromaticToggle}
+                    apiKey={apiKey} onApiKeyChange={onApiKeyChange} aiModel={aiModel || 'gemini-3-flash-preview'} onAiModelChange={onAiModelChange}
+                    waypointCount={waypointCount} onWaypointCountChange={onWaypointCountChange} onToggleCalibration={onToggleCalibration}
+                    arrivalAccuracy={props.arrivalAccuracy} onAccuracyChange={props.onAccuracyChange} aiUseMonteCarlo={props.aiUseMonteCarlo} onAiUseMcToggle={props.onAiUseMcToggle} aiUsePath={props.aiUsePath} onAiUsePathToggle={props.onAiUsePathToggle}
+                />
+
+                <HelpModal isOpen={props.helpOpen} onClose={() => props.onToggleHelp()} lang={language} />
+
+                <div style={{ position: 'absolute', bottom: '5px', right: '10px', color: '#888888', fontSize: '12px', fontWeight: 'bold', fontFamily: 'monospace', pointerEvents: 'none' }}>{VERSION}</div>
+            </div>
+
+            {(simulationState === 'success' || simulationState === 'failed') && (
                 <OutcomeOverlay
-                    reason={simulationState === 'success' ? 'success' : failReason}
-                    lang={language}
-                    onRestart={onRestart}
-                    onNewTerrain={onNewTerrain}
-                    safetyScore={safetyScore}
-                    elapsedTime={elapsedTime}
+                    reason={simulationState} lang={language} onRestart={onRestart} onNewTerrain={onNewTerrain} safetyScore={safetyScore} elapsedTime={elapsedTime}
                 />
             )}
-
-            {!isAiOnline && driveMode === 'autopilot' && (
-                <div className="offline-warning-box">
-                    <span style={{ fontWeight: 'bold' }}>⚠️ STRATEGIC OFFLINE:</span> AI KEY MISSING. USING HEURISTIC FALLBACK.
-                </div>
-            )}
-
-            {isMobile && simulationState === 'running' && (
-                <MobileControls onInputChange={onMobileInput} onPlanRoute={onPlanRoute} />
-            )}
-
-            {lidarScan && <LidarPanel data={lidarScan} lang={language} />}
-
-            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} lang={language} onLanguageChange={onLanguageChange} brightness={brightness} onBrightnessChange={onBrightnessChange} shadowContrast={shadowContrast} onShadowChange={onShadowChange} chromaticAberration={chromaticAberration} onChromaticToggle={onChromaticToggle} apiKey={apiKey} onApiKeyChange={onApiKeyChange} aiModel={aiModel || 'gemini-3-flash'} onAiModelChange={onAiModelChange} waypointCount={waypointCount} onWaypointCountChange={onWaypointCountChange} onToggleCalibration={onToggleCalibration} />
-
-            <div style={{ position: 'absolute', bottom: '5px', right: '10px', color: '#888888', fontSize: '12px', fontWeight: 'bold', fontFamily: 'monospace', pointerEvents: 'none' }}>{VERSION}</div>
-        </div>
+        </>
     );
 }

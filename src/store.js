@@ -2,7 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v0.9.45";
+export const VERSION = "v1.1.0";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -54,6 +54,11 @@ export const getInitialState = () => ({
     waypointCount: 7,
     terminalOpen: false,
     isCalibrationMode: false,
+    uiVisible: true,
+    arrivalAccuracy: 5.0,
+    aiUseMonteCarlo: true,
+    aiUsePath: true,
+    helpOpen: false,
 });
 
 function simulationReducer(state, action) {
@@ -89,7 +94,17 @@ function simulationReducer(state, action) {
                 logs: updatedLogs
             };
         case 'SET_DRIVE_MODE':
-            return { ...state, driveMode: action.payload };
+            const modeText = action.payload === DRIVE_MODES.AUTOPILOT ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED";
+            return {
+                ...state,
+                driveMode: action.payload,
+                logs: [{
+                    id: Date.now(),
+                    text: modeText,
+                    type: action.payload === DRIVE_MODES.AUTOPILOT ? 'warning' : 'info',
+                    timestamp: new Date().toLocaleTimeString()
+                }, ...state.logs].slice(0, 50)
+            };
         case 'TOGGLE_NAV_OVERLAY':
             const isOverlayOn = !state.navigationOverlay;
             return {
@@ -111,13 +126,15 @@ function simulationReducer(state, action) {
         case 'UPDATE_TELEMETRY':
             return { ...state, ...action.payload };
         case 'SET_SIMULATION_STATE':
-            const simLog = action.payload.state === 'success'
+            const targetState = action.payload.state || action.payload; // Handle both 'success' and {state: 'failed', reason: '...'}
+            const targetReason = action.payload.reason || '';
+            const simLog = targetState === 'success'
                 ? "MISSION: SUCCESS - BEACON REACHED"
-                : `MISSION: FAILED - ${action.payload.reason?.toUpperCase() || 'UNKNOWN ERROR'}`;
+                : `MISSION: TERMINATED - ${targetReason.toUpperCase() || 'STABILITY BREACH'}`;
             return {
                 ...state,
-                simulationState: action.payload.state,
-                failReason: action.payload.reason || '',
+                simulationState: targetState,
+                failReason: targetReason,
                 logs: [{
                     id: Date.now(),
                     text: simLog,
@@ -198,6 +215,16 @@ function simulationReducer(state, action) {
             };
         case 'TOGGLE_TERMINAL':
             return { ...state, terminalOpen: !state.terminalOpen };
+        case 'TOGGLE_UI':
+            return { ...state, uiVisible: !state.uiVisible };
+        case 'SET_ARRIVAL_ACCURACY':
+            return { ...state, arrivalAccuracy: action.payload };
+        case 'SET_AI_USE_MC':
+            return { ...state, aiUseMonteCarlo: action.payload };
+        case 'SET_AI_USE_PATH':
+            return { ...state, aiUsePath: action.payload };
+        case 'TOGGLE_HELP':
+            return { ...state, helpOpen: !state.helpOpen };
         default:
             return state;
     }
