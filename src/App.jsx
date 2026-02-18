@@ -26,7 +26,7 @@ import {
 // Components
 import Rover from './components/Rover';
 import LunarTerrain from './components/LunarTerrain';
-import Rocks from './components/Rocks';
+// import Rocks from './components/Rocks'; // v1.3.0: Disabled — rock generator needs rework
 import { Earth, Beacon } from './components/EarthAndBeacon';
 import MonteCarloViz from './components/MonteCarloViz';
 import HUD from './components/HUD';
@@ -59,9 +59,9 @@ function PhysicsScene({
 }) {
   return (
     <>
-      <LunarLighting shadowContrast={shadowContrast} />
+      <LunarLighting shadowContrast={shadowContrast} roverPosition={telemetry.position} />
       <LunarTerrain terrainData={terrainData} />
-      <Rocks rocks={terrainData.rocks} />
+      {/* <Rocks rocks={terrainData.rocks} /> */} {/* v3.0.0: Disabled — rock generator needs rework */}
 
       {(simulationState === 'running' || simulationState === 'failed') && (
         <Rover
@@ -116,8 +116,8 @@ export default function SimulationApp() {
   const lastTimeRef = useRef(performance.now());
 
   const terrainData = useMemo(() => {
-    return generateTerrainData(state.terrainSeed);
-  }, [state.terrainSeed]);
+    return generateTerrainData(state.terrainSeed, state.terrainMode);
+  }, [state.terrainSeed, state.terrainMode]);
 
   const [isMobile, setIsMobile] = useState(false);
   const [waypoints, setWaypoints] = useState([]);
@@ -130,6 +130,13 @@ export default function SimulationApp() {
   const lastAiLogTimeRef = useRef(0);    // V0.8.26: Frequency control
   const [currentLatency, setCurrentLatency] = useState(1000); // V0.9.25: Dynamic RTT tracking in ms
   const lastAiSourceRef = useRef(null); // V0.9.46: Track AI vs Core driver for logging
+  const targetDistance = useMemo(() => {
+    if (!telemetry.position || !terrainData || !terrainData.beacon) return 0;
+    return Math.sqrt(
+      Math.pow(telemetry.position[0] - terrainData.beacon.x, 2) +
+      Math.pow(telemetry.position[2] - terrainData.beacon.z, 2)
+    );
+  }, [telemetry.position, terrainData.beacon, terrainData.size]);
 
   // V16: MANUAL INTENT PLANNING - Only calculate when user asks
   const triggerAiPlanning = useCallback(async () => {
@@ -417,15 +424,10 @@ export default function SimulationApp() {
       if (state.simulationState === 'running' && !isAiPlanning) {
         elapsedRef.current += dt;
         batteryRef.current = Math.max(0, batteryRef.current - dt * 0.05);
-        const dist = Math.sqrt(
-          Math.pow(telemetry.position[0] - terrainData.beacon.x, 2) +
-          Math.pow(telemetry.position[2] - terrainData.beacon.z, 2)
-        );
-        dispatch({ type: 'SET_TARGET_DISTANCE', payload: dist });
 
         if (isRollover && state.simulationState === 'running') {
           dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'failed', reason: 'stability' } });
-        } else if (dist < state.arrivalAccuracy && state.simulationState === 'running') {
+        } else if (targetDistance < state.arrivalAccuracy && state.simulationState === 'running') {
           dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'success' } });
         } else if (batteryRef.current <= 0 && state.simulationState === 'running') {
           dispatch({ type: 'SET_SIMULATION_STATE', payload: { state: 'failed', reason: 'damage' } });
@@ -521,10 +523,12 @@ export default function SimulationApp() {
           commandHistory: lastAiCommandsRef.current,
           latency: currentLatency,
           // V0.9.46: Sensor Toggles & Data
-          useMonteCarlo: state.aiUseMonteCarlo,
-          usePath: state.aiUsePath,
-          mcSummary: state.monteCarloResults ? summarizeFan(state.monteCarloResults.trajectories) : "Calculating...",
-          currentPathWaypoints: waypoints && waypoints.length > 0 ? `Next WP: [${f1(waypoints[0][0])}, ${f1(waypoints[0][1])}]` : "No Path"
+          currentPathWaypoints: waypoints && waypoints.length > 0 ? `Next WP: [${f1(waypoints[0][0])}, ${f1(waypoints[0][1])}]` : "No Path",
+          // v3.1.0: Frame Capture for Cosmos
+          capturedFrame: state.visionProvider === 'cosmos' ? sceneCapturedFrame : null,
+          visionProvider: state.visionProvider,
+          nvidiaNimUrl: state.nvidiaNimUrl,
+          nvidiaApiKey: state.nvidiaApiKey
         };
 
         // AI Autopilot Logic (Call GEMINI only if not busy)
@@ -616,7 +620,7 @@ export default function SimulationApp() {
         inputRef.current.backward = cmd.throttle < 0 ? -cmd.throttle : 0;
       }
     }
-  }, [monteCarloTrajectories, state.driveMode, state.simulationState, riskMetrics, waypoints, currentWaypointIdx, currentLatency]);
+  }, [monteCarloTrajectories, state.driveMode, state.simulationState, riskMetrics, waypoints, currentWaypointIdx, currentLatency, targetDistance]);
 
   useEffect(() => {
     inputRef.current = { forward: 0, backward: 0, left: 0, right: 0, brake: false };
@@ -718,16 +722,43 @@ export default function SimulationApp() {
     lastAiCommandsRef.current = [];
     dispatch({ type: 'TOGGLE_CALIBRATION' });
   }, []);
-  const targetDistance = useMemo(() => {
-    const [dx, dy, dz] = [telemetry.position[0] - terrainData.beacon.x, telemetry.position[1] - terrainData.beacon.y, telemetry.position[2] - terrainData.beacon.z];
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
-  }, [telemetry.position, terrainData.beacon]);
+  const [sceneCapturedFrame, setSceneCapturedFrame] = useState(null);
+
+  // v3.1.0: Scene Capture Hook
+  const onCanvasCreated = useCallback(({ gl }) => {
+    window.simGL = gl; // Global reference for easy capture
+  }, []);
+
+  const handleCaptureFrame = useCallback(() => {
+    if (window.simGL) {
+      const frame = captureSimulationFrame(window.simGL);
+      setSceneCapturedFrame(frame);
+    }
+  }, []);
+
+  // Capture frame right before AI autopilot run
+  useEffect(() => {
+    if (state.driveMode === DRIVE_MODES.AUTOPILOT && state.visionProvider === 'cosmos' && !isAiAutopilotRunningRef.current) {
+      handleCaptureFrame();
+    }
+  }, [state.driveMode, state.visionProvider, handleCaptureFrame]);
 
   return (
     <SimulationContext.Provider value={state}>
       <SimulationDispatchContext.Provider value={dispatch}>
         <div style={{ width: '100vw', height: '100vh', background: '#000000', position: 'relative', overflow: 'hidden' }}>
-          <Canvas shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: state.brightness }} camera={{ fov: 60, near: 0.1, far: 2000, position: [0, 10, 15] }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+          <Canvas
+            shadows
+            gl={{
+              antialias: true,
+              toneMapping: THREE.ACESFilmicToneMapping,
+              toneMappingExposure: state.brightness,
+              preserveDrawingBuffer: true // Required for frame capture
+            }}
+            onCreated={onCanvasCreated}
+            camera={{ fov: 60, near: 0.1, far: 2000, position: [0, 10, 15] }}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+          >
             <color attach="background" args={['#000000']} />
             <fog attach="fog" args={['#000000', 100, 450]} />
             <Stars count={6000} />
@@ -806,8 +837,15 @@ export default function SimulationApp() {
             onAiUseMcToggle={(val) => dispatch({ type: 'SET_AI_USE_MC', payload: val })}
             aiUsePath={state.aiUsePath}
             onAiUsePathToggle={(val) => dispatch({ type: 'SET_AI_USE_PATH', payload: val })}
+            nvidiaNimUrl={state.nvidiaNimUrl}
+            onUrlChange={(val) => dispatch({ type: 'SET_NVIDIA_NIM_URL', payload: val })}
+            nvidiaApiKey={state.nvidiaApiKey}
+            onNvApiKeyChange={(val) => dispatch({ type: 'SET_NVIDIA_API_KEY', payload: val })}
+            capturedFrame={sceneCapturedFrame}
             helpOpen={state.helpOpen}
             onToggleHelp={() => dispatch({ type: 'TOGGLE_HELP' })}
+            terrainMode={state.terrainMode}
+            onTerrainModeChange={(val) => dispatch({ type: 'SET_TERRAIN_MODE', payload: val })}
             onMobileInput={(inp) => {
               if (inp.toggleAutopilot) {
                 dispatch({ type: 'TOGGLE_AUTOPILOT' });

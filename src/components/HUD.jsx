@@ -294,7 +294,9 @@ function SettingsModal({
     isOpen, onClose, lang, onLanguageChange, brightness, onBrightnessChange, shadowContrast, onShadowChange,
     chromaticAberration, onChromaticToggle, apiKey, onApiKeyChange, aiModel, onAiModelChange,
     waypointCount, onWaypointCountChange, onToggleCalibration,
-    arrivalAccuracy, onAccuracyChange, aiUseMonteCarlo, onAiUseMcToggle, aiUsePath, onAiUsePathToggle
+    arrivalAccuracy, onAccuracyChange, aiUseMonteCarlo, onAiUseMcToggle, aiUsePath, onAiUsePathToggle,
+    terrainMode, onTerrainModeChange,
+    nvidiaNimUrl, onUrlChange, nvidiaApiKey, onNvApiKeyChange
 }) {
     if (!isOpen) return null;
     const { isCalibrationMode } = useSimulationState();
@@ -335,6 +337,27 @@ function SettingsModal({
                         {isCalibrationMode ? "EXIT CALIBRATION (RETURN TO MOON)" : "ENTER CALIBRATION (FLAT PLANE)"}
                     </button>
                 </div>
+                <div className="settings-row" style={{ display: 'block' }}>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>TERRAIN MODE:</span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {[['legacy', 'LEGACY'], ['naturalist', 'NATURALIST'], ['ethereal', 'ETHEREAL']].map(([val, label]) => (
+                            <button
+                                key={val}
+                                className={`hud-button ${terrainMode === val ? 'active' : ''}`}
+                                style={{ flex: 1, margin: 0, fontSize: '9px' }}
+                                onClick={() => onTerrainModeChange(val)}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                    <div style={{ fontSize: '9px', color: 'rgba(0,255,255,0.4)', marginTop: '4px' }}>
+                        {terrainMode === 'legacy' ? 'Noise + craters + rocks' :
+                            terrainMode === 'naturalist' ? 'Smooth rolling hills' :
+                                'Monumental sine waves'}
+                    </div>
+                </div>
+
                 <div className="settings-row">
                     <span className="label">{t.brightness}:</span>
                     <div className="brightness-control" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -402,29 +425,55 @@ function SettingsModal({
                 </div>
 
                 <div className="settings-row" style={{ display: 'block' }}>
-                    <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.aiModelIdentity}:</span>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI MODEL IDENTITY:</span>
                     <select
                         value={aiModel || 'gemini-3-flash-preview'}
                         onChange={(e) => onAiModelChange(e.target.value)}
-                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer' }}
+                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer', marginBottom: '12px' }}
                     >
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                        <option value="cosmos-reasoning">NVIDIA Cosmos</option>
+                        <option value="cosmos-reasoning">NVIDIA Cosmos (Cookoff)</option>
                     </select>
-                </div>
 
-                <div className="settings-row" style={{ display: 'block' }}>
-                    <span className="label" style={{ marginBottom: '5px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>
-                        {aiModel === 'cosmos-reasoning' ? `${t.cosmosEndpoint}:` : `${t.geminiApiKey}:`}
-                    </span>
-                    <input
-                        type="password"
-                        value={apiKey || ''}
-                        onChange={(e) => onApiKeyChange(e.target.value)}
-                        placeholder={aiModel === 'cosmos-reasoning' ? "https://..." : "Enter Key..."}
-                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }}
-                        onPointerDownCapture={(e) => { e.stopPropagation(); }}
-                    />
+                    {aiModel === 'cosmos-reasoning' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(0,255,255,0.05)', border: '1px solid rgba(0,255,255,0.2)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>NIM ENDPOINT URL:</span>
+                                <input
+                                    className="api-input"
+                                    value={nvidiaNimUrl}
+                                    onChange={(e) => onUrlChange(e.target.value)}
+                                    placeholder="http://IP_ADDRESS:8000"
+                                    style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }}
+                                    onPointerDownCapture={(e) => { e.stopPropagation(); }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>NVIDIA API KEY (NIM):</span>
+                                <input
+                                    className="api-input"
+                                    type="password"
+                                    value={nvidiaApiKey}
+                                    onChange={(e) => onNvApiKeyChange(e.target.value)}
+                                    placeholder="nv-nim-..."
+                                    style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }}
+                                    onPointerDownCapture={(e) => { e.stopPropagation(); }}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>{t.geminiApiKey}:</span>
+                            <input
+                                type="password"
+                                value={apiKey || ''}
+                                onChange={(e) => onApiKeyChange(e.target.value)}
+                                placeholder="Enter Gemini Key..."
+                                style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }}
+                                onPointerDownCapture={(e) => { e.stopPropagation(); }}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="settings-row">
@@ -526,7 +575,10 @@ export default function HUD(props) {
         onLanguageChange, onMobileInput, brightness, onBrightnessChange, shadowContrast, onShadowChange, chromaticAberration, onChromaticToggle, riskMetrics,
         apiKey, onApiKeyChange, isAiOnline, aiQuote, navigationOverlay, onToggleNav, aiModel, onAiModelChange,
         isAiPlanning, isMcCalculating, onPlanRoute,
-        lidarScan, waypointCount, onWaypointCountChange, onToggleCalibration
+        lidarScan, waypointCount, onWaypointCountChange, onToggleCalibration,
+        terrainMode, onTerrainModeChange,
+        nvidiaNimUrl, onUrlChange, nvidiaApiKey, onNvApiKeyChange,
+        capturedFrame
     } = props;
     const { terminalOpen } = useSimulationState();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -587,7 +639,32 @@ export default function HUD(props) {
                     apiKey={apiKey} onApiKeyChange={onApiKeyChange} aiModel={aiModel || 'gemini-3-flash-preview'} onAiModelChange={onAiModelChange}
                     waypointCount={waypointCount} onWaypointCountChange={onWaypointCountChange} onToggleCalibration={onToggleCalibration}
                     arrivalAccuracy={props.arrivalAccuracy} onAccuracyChange={props.onAccuracyChange} aiUseMonteCarlo={props.aiUseMonteCarlo} onAiUseMcToggle={props.onAiUseMcToggle} aiUsePath={props.aiUsePath} onAiUsePathToggle={props.onAiUsePathToggle}
+                    terrainMode={terrainMode} onTerrainModeChange={onTerrainModeChange}
+                    nvidiaNimUrl={nvidiaNimUrl} onUrlChange={onUrlChange}
+                    nvidiaApiKey={nvidiaApiKey} onNvApiKeyChange={onNvApiKeyChange}
                 />
+
+                {/* v3.1.0: Vision Debug Overlay */}
+                {capturedFrame && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '20px',
+                        left: '320px',
+                        width: '160px',
+                        height: '110px',
+                        background: 'rgba(0,0,0,0.8)',
+                        border: '1px solid #00FFFF',
+                        padding: '4px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                        pointerEvents: 'none',
+                        zIndex: 10
+                    }}>
+                        <div style={{ fontSize: '9px', color: '#00FFFF', letterSpacing: '1px' }}>AI VISION FEED (LIVE)</div>
+                        <img src={`data:image/png;base64,${capturedFrame}`} style={{ width: '100%', height: '80px', objectFit: 'cover', opacity: 0.8 }} alt="AI Vision" />
+                    </div>
+                )}
 
                 <HelpModal isOpen={props.helpOpen} onClose={() => props.onToggleHelp()} lang={language} />
 

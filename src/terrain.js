@@ -1,4 +1,7 @@
-// terrain.js — Procedural lunar terrain generation with Perlin noise, craters, and rocks
+// terrain.js — v3.0.1: Multi-mode terrain (legacy / naturalist / ethereal)
+// legacy     = original Pathfinder noise + craters + rocks
+// naturalist = smooth rolling hills with blurred craters (no rocks)
+// ethereal   = monumental sine waves + sinusoidal craters (no rocks)
 import { createNoise2D } from 'simplex-noise';
 
 const TERRAIN_SIZE = 200;
@@ -15,23 +18,30 @@ function mulberry32(a) {
     };
 }
 
+const smoothstep = (x, edge0, edge1) => {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+};
+
 // Generate crater data
-function generateCraters(rng, count = 15) {
+function generateCraters(rng, count = 15, mode = 'legacy') {
     const craters = [];
-    for (let i = 0; i < count; i++) {
+    const n = mode === 'ethereal' ? 30 : mode === 'naturalist' ? 18 : count;
+    for (let i = 0; i < n; i++) {
         craters.push({
-            x: (rng() - 0.5) * TERRAIN_SIZE * 0.85,
-            z: (rng() - 0.5) * TERRAIN_SIZE * 0.85,
-            radius: 4 + rng() * 14,
-            depth: 1.5 + rng() * 4,
-            rimHeight: 0.5 + rng() * 2.0,
-            rimSharpness: 0.3 + rng() * 0.7,
+            x: (rng() - 0.5) * TERRAIN_SIZE * (mode === 'legacy' ? 0.85 : 0.9),
+            z: (rng() - 0.5) * TERRAIN_SIZE * (mode === 'legacy' ? 0.85 : 0.9),
+            radius: 4 + rng() * (mode === 'legacy' ? 14 : 18),
+            depth: (mode === 'legacy' ? 1.5 : 2.0) + rng() * (mode === 'legacy' ? 4 : 6),
+            rimHeight: (mode === 'legacy' ? 0.5 : 0.8) + rng() * 2.5,
+            rimSharpness: 0.3 + rng() * 0.7, // legacy only
+            profile: mode === 'ethereal' ? 'sinusoidal' : (rng() > 0.5 ? 'parabolic' : 'sinusoidal'),
         });
     }
     return craters;
 }
 
-// Generate rock positions
+// Generate rock positions (legacy only)
 function generateRocks(rng, count = 60) {
     const rocks = [];
     for (let i = 0; i < count; i++) {
@@ -41,7 +51,7 @@ function generateRocks(rng, count = 60) {
             z: (rng() - 0.5) * TERRAIN_SIZE * 0.85,
             scale,
             rotationY: rng() * Math.PI * 2,
-            type: Math.floor(rng() * 4), // 0-3 — different rock shapes
+            type: Math.floor(rng() * 4),
         });
     }
     return rocks;
@@ -76,7 +86,6 @@ export function getHeightAtPosition(heightData, worldX, worldZ) {
     const h01 = heightData[iz1 * (TERRAIN_SEGMENTS + 1) + ix0];
     const h11 = heightData[iz1 * (TERRAIN_SEGMENTS + 1) + ix1];
 
-    // Bilinear interpolation
     const h0 = h00 * (1 - fx) + h10 * fx;
     const h1 = h01 * (1 - fx) + h11 * fx;
     return h0 * (1 - fz) + h1 * fz;
@@ -104,15 +113,15 @@ export function getSlopeAtPosition(heightData, worldX, worldZ) {
 }
 
 // Generate the complete terrain data
-export function generateTerrainData(seed) {
-    // V0.9.40: CALIBRATION MODE (Ideal Flat Surface)
+// mode: 'legacy' | 'naturalist' | 'ethereal'
+export function generateTerrainData(seed, mode = 'legacy') {
     const isCalibration = seed === 999;
 
     const rng = mulberry32(Math.floor(isCalibration ? 1234 : seed));
     const noise2D = createNoise2D(() => rng());
 
-    const craters = isCalibration ? [] : generateCraters(rng);
-    const rocks = isCalibration ? [] : generateRocks(rng);
+    const craters = isCalibration ? [] : generateCraters(rng, 15, mode);
+    const rocks = (isCalibration || mode !== 'legacy') ? [] : generateRocks(rng);
     const heightData = new Float32Array((TERRAIN_SEGMENTS + 1) * (TERRAIN_SEGMENTS + 1));
 
     // Build heightmap
@@ -126,34 +135,83 @@ export function generateTerrainData(seed) {
                 continue;
             }
 
-            // Layer 1: Base rolling hills (Perlin noise, multiple octaves)
             let height = 0;
-            height += noise2D(worldX * 0.008, worldZ * 0.008) * 8;  // Large hills
-            height += noise2D(worldX * 0.02, worldZ * 0.02) * 3;    // Medium bumps
-            height += noise2D(worldX * 0.06, worldZ * 0.06) * 1;    // Fine detail
-            height += noise2D(worldX * 0.15, worldZ * 0.15) * 0.3;  // Micro detail
 
-            // Layer 2: Craters (subtraction with rim)
-            for (const crater of craters) {
-                const dx = worldX - crater.x;
-                const dz = worldZ - crater.z;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-                const normalizedDist = dist / crater.radius;
-
-                if (normalizedDist < 2.0) {
-                    if (normalizedDist < 1.0) {
-                        const bowlFactor = 1 - normalizedDist * normalizedDist;
-                        height -= crater.depth * bowlFactor;
+            if (mode === 'legacy') {
+                // Original: Perlin noise + craters with rim
+                height += noise2D(worldX * 0.008, worldZ * 0.008) * 8;
+                height += noise2D(worldX * 0.02, worldZ * 0.02) * 3;
+                height += noise2D(worldX * 0.06, worldZ * 0.06) * 1;
+                height += noise2D(worldX * 0.15, worldZ * 0.15) * 0.3;
+                for (const crater of craters) {
+                    const dx = worldX - crater.x;
+                    const dz = worldZ - crater.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    const nd = dist / crater.radius;
+                    if (nd < 2.0) {
+                        if (nd < 1.0) height -= crater.depth * (1 - nd * nd);
+                        if (nd > 0.7 && nd < 1.5) {
+                            const rimFactor = Math.exp(-(Math.abs(nd - 1.0) ** 2) / (crater.rimSharpness * 0.15));
+                            height += crater.rimHeight * rimFactor;
+                        }
                     }
-                    if (normalizedDist > 0.7 && normalizedDist < 1.5) {
-                        const rimDist = Math.abs(normalizedDist - 1.0);
-                        const rimFactor = Math.exp(-rimDist * rimDist / (crater.rimSharpness * 0.15));
-                        height += crater.rimHeight * rimFactor;
+                }
+
+            } else if (mode === 'naturalist') {
+                // Smooth rolling hills — blurred craters, no rocks
+                height += noise2D(worldX * 0.007, worldZ * 0.007) * 9.0;
+                height += noise2D(worldX * 0.02, worldZ * 0.02) * 2.5;
+                for (const crater of craters) {
+                    const d = Math.sqrt((worldX - crater.x) ** 2 + (worldZ - crater.z) ** 2);
+                    const nd = d / crater.radius;
+                    if (nd < 2.5) {
+                        if (nd < 1.0) height -= crater.depth * (crater.profile === 'sinusoidal'
+                            ? Math.cos(nd * Math.PI) * 0.5 + 0.5
+                            : 1.0 - Math.pow(nd, 2.3));
+                        const rf = Math.cos(Math.min(1.0, Math.abs(nd - 1.0) * 2.5) * Math.PI) * 0.5 + 0.5;
+                        height += crater.rimHeight * rf * (1.0 - smoothstep(nd, 0.7, 1.3));
+                    }
+                }
+
+            } else if (mode === 'ethereal') {
+                // Monumental sine waves + sinusoidal craters
+                height = Math.sin(worldX * 0.03) * Math.cos(worldZ * 0.03) * 9 + Math.sin(worldX * 0.09) * 2.5;
+                height += noise2D(worldX * 0.015, worldZ * 0.015) * 1.5;
+                height += noise2D(worldX * 0.1, worldZ * 0.1) * 0.35;
+                for (const crater of craters) {
+                    const d = Math.sqrt((worldX - crater.x) ** 2 + (worldZ - crater.z) ** 2);
+                    const nd = d / crater.radius;
+                    if (nd < 2.0) {
+                        if (nd < 1.0) height -= crater.depth * (Math.cos(nd * Math.PI) * 0.5 + 0.5);
+                        const rf = Math.cos(Math.min(1.0, Math.abs(nd - 1.0) * 2.0) * Math.PI) * 0.5 + 0.5;
+                        height += crater.rimHeight * rf * (1.0 - smoothstep(nd, 0.8, 1.2));
                     }
                 }
             }
+
             heightData[iz * (TERRAIN_SEGMENTS + 1) + ix] = height;
         }
+    }
+
+    // Post-processing: blur for naturalist mode
+    if (mode === 'naturalist' && !isCalibration) {
+        const blurred = new Float32Array(heightData.length);
+        const dim = TERRAIN_SEGMENTS + 1;
+        for (let iz = 0; iz < dim; iz++) {
+            for (let ix = 0; ix < dim; ix++) {
+                let sum = 0, count = 0;
+                for (let kz = -1; kz <= 1; kz++) {
+                    for (let kx = -1; kx <= 1; kx++) {
+                        const nz = iz + kz, nx = ix + kx;
+                        if (nz >= 0 && nz < dim && nx >= 0 && nx < dim) {
+                            sum += heightData[nz * dim + nx]; count++;
+                        }
+                    }
+                }
+                blurred[iz * dim + ix] = sum / count;
+            }
+        }
+        heightData.set(blurred);
     }
 
     // Generate Cannon.js heightfield data
@@ -166,8 +224,8 @@ export function generateTerrainData(seed) {
         matrix.push(row);
     }
 
-    // Rocks
-    const filteredRocks = isCalibration ? [] : rocks.filter((rock) => {
+    // Rocks (legacy only)
+    const filteredRocks = (isCalibration || mode !== 'legacy') ? [] : rocks.filter((rock) => {
         if (Math.abs(rock.x) < 10 && Math.abs(rock.z) < 10) return false;
         for (const crater of craters) {
             if (Math.sqrt((rock.x - crater.x) ** 2 + (rock.z - crater.z) ** 2) < crater.radius * 0.6) return false;
@@ -182,16 +240,22 @@ export function generateTerrainData(seed) {
     // Target/Spawn positioning
     let beaconX, beaconZ, spawnX, spawnZ;
     if (isCalibration) {
-        // Corner-to-Corner Test
         beaconX = 80; beaconZ = 80;
         spawnX = -80; spawnZ = -80;
     } else {
         const quadrantX = rng() > 0.5 ? 1 : -1;
         const quadrantZ = rng() > 0.5 ? 1 : -1;
-        beaconX = quadrantX * (65 + rng() * 25);
-        beaconZ = quadrantZ * (65 + rng() * 25);
-        spawnX = -quadrantX * (70 + rng() * 10);
-        spawnZ = -quadrantZ * (70 + rng() * 10);
+        if (mode === 'legacy') {
+            beaconX = quadrantX * (65 + rng() * 25);
+            beaconZ = quadrantZ * (65 + rng() * 25);
+            spawnX = -quadrantX * (70 + rng() * 10);
+            spawnZ = -quadrantZ * (70 + rng() * 10);
+        } else {
+            beaconX = quadrantX * (75 + rng() * 15);
+            beaconZ = quadrantZ * (75 + rng() * 15);
+            spawnX = -quadrantX * 65;
+            spawnZ = -quadrantZ * 65;
+        }
     }
 
     const beaconY = getHeightAtPosition(heightData, beaconX, beaconZ) + 2;
@@ -206,5 +270,6 @@ export function generateTerrainData(seed) {
         size: TERRAIN_SIZE,
         segments: TERRAIN_SEGMENTS,
         elementSize: TERRAIN_SIZE / TERRAIN_SEGMENTS,
+        mode,
     };
 }

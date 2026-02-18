@@ -2,7 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v1.1.0";
+export const VERSION = "v3.2.0";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -59,6 +59,11 @@ export const getInitialState = () => ({
     aiUseMonteCarlo: true,
     aiUsePath: true,
     helpOpen: false,
+    terrainMode: 'legacy', // 'legacy' | 'naturalist' | 'ethereal'
+    // v3.1.0: Vision Provider settings
+    visionProvider: 'gemini', // 'gemini' | 'cosmos'
+    nvidiaNimUrl: '',
+    nvidiaApiKey: '',
 });
 
 function simulationReducer(state, action) {
@@ -153,6 +158,7 @@ function simulationReducer(state, action) {
                 driveMode: DRIVE_MODES.MANUAL, // Force manual
                 navigationOverlay: false,      // Force overlay off
                 terrainSeed: state.terrainSeed, // Keeps the map
+                terrainMode: state.terrainMode, // v3.0.2: Preserve mode
                 logs: [{
                     id: Date.now(),
                     text: "SYSTEM: RESTARTING MISSION...",
@@ -170,7 +176,8 @@ function simulationReducer(state, action) {
                 chromaticAberration: state.chromaticAberration,
                 driveMode: DRIVE_MODES.MANUAL,
                 navigationOverlay: false,
-                terrainSeed: Math.random() * 10000, // Changes the map
+                terrainSeed: Math.random() * 10000,
+                terrainMode: state.terrainMode, // v3.0.2: Preserve mode
                 logs: [{
                     id: Date.now(),
                     text: "SYSTEM: LANDSCAPE GENERATED.",
@@ -186,9 +193,11 @@ function simulationReducer(state, action) {
             localStorage.setItem('pathfinder_api_key', action.payload);
             return { ...state, apiKey: action.payload };
         case 'SET_AI_MODEL':
+            const isCosmos = action.payload === 'cosmos-reasoning';
             return {
                 ...state,
                 aiModel: action.payload,
+                visionProvider: isCosmos ? 'cosmos' : 'gemini',
                 logs: [{
                     id: Date.now(),
                     text: `SYSTEM: AI ARCHITECT SWITCHED TO [${action.payload.toUpperCase()}]`,
@@ -225,6 +234,16 @@ function simulationReducer(state, action) {
             return { ...state, aiUsePath: action.payload };
         case 'TOGGLE_HELP':
             return { ...state, helpOpen: !state.helpOpen };
+        case 'SET_TERRAIN_MODE':
+            return { ...state, terrainMode: action.payload };
+        case 'SET_VISION_PROVIDER':
+            return { ...state, visionProvider: action.payload };
+        case 'SET_NVIDIA_NIM_URL':
+            return { ...state, nvidiaNimUrl: action.payload };
+        case 'SET_NVIDIA_API_KEY':
+            return { ...state, nvidiaApiKey: action.payload };
+        case 'SET_TARGET_DISTANCE':
+            return { ...state, targetDistance: action.payload };
         default:
             return state;
     }

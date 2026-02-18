@@ -1,4 +1,4 @@
-// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v0.9.38)
+// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.2.0)
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as THREE from 'three';
 
@@ -6,6 +6,104 @@ const GEMINI_MODEL = "gemini-3-flash-preview";
 
 export const f1 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(1) : '0.0');
 export const f2 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(2) : '0.00');
+
+// ============================================================
+// v3.2.0: VISION BRIDGE & FRAME CAPTURE
+// ============================================================
+
+/**
+ * Captures the current Three.js canvas as a base64 PNG.
+ * NOTE: App's Canvas must have gl={{ preserveDrawingBuffer: true }}
+ */
+export function captureSimulationFrame(gl) {
+    try {
+        if (!gl || !gl.domElement) return null;
+        return gl.domElement.toDataURL('image/png').split(',')[1];
+    } catch (e) {
+        console.error("Frame capture failed:", e);
+        return null;
+    }
+}
+
+/**
+ * Universal Vision Provider to hot-swap between Gemini and NVIDIA Cosmos
+ */
+export class VisionProvider {
+    constructor(config) {
+        this.type = config.type || 'gemini'; // 'gemini' | 'cosmos'
+        this.apiKey = config.apiKey;
+        this.url = config.url; // Required for Cosmos
+        this.model = config.model;
+    }
+
+    async generateContent(prompt, base64Image) {
+        if (this.type === 'gemini') {
+            return this._callGemini(prompt, base64Image);
+        } else {
+            return this._callCosmos(prompt, base64Image);
+        }
+    }
+
+    async _callGemini(prompt, base64Image) {
+        const genAI = new GoogleGenerativeAI(this.apiKey);
+        const model = genAI.getGenerativeModel({
+            model: this.model || "gemini-3-flash-preview",
+            generationConfig: {
+                temperature: this.type === 'autopilot' ? 0.1 : 0.8,
+                maxOutputTokens: 2048,
+                responseMimeType: this.targetMimeType || "text/plain"
+            }
+        });
+
+        const content = base64Image
+            ? [prompt, { inlineData: { data: base64Image, mimeType: "image/png" } }]
+            : [prompt];
+
+        const result = await model.generateContent(content);
+        return result.response.text();
+    }
+
+    async _callCosmos(prompt, base64Image) {
+        // NVIDIA NIM is OpenAI-compatible (v1/chat/completions)
+        const endpoint = `${this.url.replace(/\/$/, '')}/v1/chat/completions`;
+
+        const messages = [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: prompt },
+                    {
+                        type: "image_url",
+                        image_url: { url: `data:image/png;base64,${base64Image}` }
+                    }
+                ]
+            }
+        ];
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.apiKey || 'nv-nim-dummy'}`
+            },
+            body: JSON.stringify({
+                model: "nvidia/cosmos-1-0-reasoning", // Internal NIM model name
+                messages: messages,
+                max_tokens: 1024,
+                temperature: 0.2,
+                response_format: { type: "json_object" }
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`NVIDIA NIM HTTP ${response.status}: ${err}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    }
+}
 
 // ============================================================
 // LEVEL 1: STRATEGIC PLANNER (Astro-Core Architecture)
@@ -50,18 +148,13 @@ JSON SCHEMA:
 `;
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const geminiModel = genAI.getGenerativeModel({
-            model: model,
-            generationConfig: { temperature: 0.8, maxOutputTokens: 2048 }
+        const provider = new VisionProvider({
+            type: 'gemini', // Strategy always uses Gemini/Image map for now
+            apiKey: apiKey,
+            model: model
         });
 
-        const result = await geminiModel.generateContent([
-            textPrompt,
-            { inlineData: { data: base64Image, mimeType: "image/png" } }
-        ]);
-
-        const text = result.response.text();
+        const text = await provider.generateContent(textPrompt, base64Image);
         return parseResponse(text, startPos, targetPos, terrainSize);
     } catch (err) {
         return { waypoints: [], quote: `FATAL: AI NAVIGATOR FAILURE [${err.message}]`, reasoning: "Mission Aborted: Critical failure in strategic calculation stack.", isAi: false };
@@ -111,26 +204,23 @@ MISSION DIRECTIVES:
 JSON ONLY: {"steer": -1 to 1, "throttle": -1 to 1, "reasoning": "string"}`;
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-            model: aiModel,
-            generationConfig: {
-                temperature: 0.1,
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: "object",
-                    properties: {
-                        steer: { type: "number" },
-                        throttle: { type: "number" },
-                        reasoning: { type: "string" }
-                    },
-                    required: ["steer", "throttle", "reasoning"]
-                }
-            }
+        const provider = new VisionProvider({
+            type: state.visionProvider || 'gemini',
+            apiKey: state.visionProvider === 'gemini' ? apiKey : state.nvidiaApiKey,
+            url: state.nvidiaNimUrl,
+            model: aiModel
         });
 
-        const result = await model.generateContent(textPrompt);
-        return parseAutopilotResponse(result.response.text());
+        // Setup schema for Gemini
+        if (provider.type === 'gemini') {
+            provider.targetMimeType = "application/json";
+        }
+
+        // Capture frame if in Cosmos mode
+        const base64Frame = state.visionProvider === 'cosmos' ? state.capturedFrame : null;
+
+        const text = await provider.generateContent(textPrompt, base64Frame);
+        return parseAutopilotResponse(text);
     } catch (err) {
         return { steer: 0, throttle: 0, reasoning: `AI_PIPELINE_STALLED: ${err.message}` };
     }
