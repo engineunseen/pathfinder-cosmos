@@ -62,11 +62,11 @@ const earthFragmentShader = `
         float diff = max(dot(vNormal, lightDir), 0.0);
         
         vec3 viewDir = normalize(vViewPosition);
-        float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 3.0); 
+        float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 5.0); 
         vec3 haloColor = vec3(0.1, 0.4, 1.0);
         
         vec3 finalColor = color * (diff * 1.5 + 0.05);
-        finalColor += haloColor * fresnel * 0.8; 
+        finalColor += haloColor * fresnel * 0.5; 
         
         gl_FragColor = vec4(finalColor, 1.0);
     }
@@ -86,9 +86,9 @@ const haloFragmentShader = `
     void main() {
         float d = length(vUv - 0.5);
         float glow = smoothstep(0.5, 0.28, d);
-        glow = pow(glow, 6.0);
+        glow = pow(glow, 13.0);
         vec3 blueGlow = vec3(0.05, 0.25, 1.0);
-        gl_FragColor = vec4(blueGlow, glow * 0.28);
+        gl_FragColor = vec4(blueGlow, glow * 0.5);
     }
 `;
 
@@ -109,7 +109,7 @@ export function Earth() {
     return (
         <group position={[200, 80, -500]}>
             {/* BACKLIGHT HALO — blue, soft, billboard */}
-            <mesh ref={glowRef} scale={[2.0, 2.0, 1]} position={[0, 0, -2]}>
+            <mesh ref={glowRef} scale={[2.7, 2.7, 1]} position={[0, 0, -2]}>
                 <planeGeometry args={[100, 100]} />
                 <shaderMaterial
                     vertexShader={haloVertexShader}
@@ -135,7 +135,7 @@ export function Earth() {
 
 // ============================================================
 // ============================================================
-// BEACON — v3.3.1: Cyan mast + Static Base Rings + Floating Rhombus
+// BEACON — v3.3.4: Green Crystal Ring + v3.3.3 static base
 // ============================================================
 export function Beacon({ position }) {
     const coreRef = useRef();
@@ -210,10 +210,11 @@ export function Beacon({ position }) {
             </mesh>
 
             {/* v3.2.0: TWO ROTATING RINGS around the core crystal (Rhombus) */}
+            {/* v3.3.4: GREEN Crystal Ring */}
             <group ref={crystalRing1Ref} position={[0, 93, 0]}>
                 <mesh rotation={[Math.PI / 2, 0, 0]}>
                     <torusGeometry args={[14, 0.2, 16, 64]} />
-                    <meshStandardMaterial color="#00FFFF" emissive="#00FFFF" emissiveIntensity={20} transparent opacity={0.6} toneMapped={false} />
+                    <meshStandardMaterial color="#00FF00" emissive="#00FF00" emissiveIntensity={20} transparent opacity={0.6} toneMapped={false} />
                 </mesh>
             </group>
             <group ref={crystalRing2Ref} position={[0, 93, 0]}>
@@ -248,8 +249,8 @@ export function Beacon({ position }) {
                 </mesh>
             </group>
 
-            {/* Base ground disc */}
-            <mesh position={[0, 0.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            {/* Base ground disc — v3.3.3: Lowered to match rings (Y=-5) */}
+            <mesh position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                 <circleGeometry args={[12, 32]} />
                 <meshStandardMaterial
                     color="#00FFFF"

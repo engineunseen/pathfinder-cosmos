@@ -1,4 +1,4 @@
-// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.3.2)
+// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.3.5)
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as THREE from 'three';
 

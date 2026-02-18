@@ -48,11 +48,11 @@
 
 ---
 **Статус:** Ожидает утверждения пользователем для начала Этапа 1.
-**Версия:** v3.3.2
+**Версия:** v3.3.5
 
 ---
 
-# NVIDIA Cosmos Integration Roadmap (English v3.3.2)
+# NVIDIA Cosmos Integration Roadmap (English v3.3.4)
 
 ## 🚀 Step-by-Step Roadmap for the User
 
