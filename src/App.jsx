@@ -108,6 +108,14 @@ export default function SimulationApp() {
 
   const telemetryRef = useRef(telemetry);
   const [isAiPlanning, setIsAiPlanning] = useState(false);
+  const renderTicksRef = useRef(0); // v3.3.1: Throttle HUD updates
+
+  // v3.3.2: Consolidated AI configuration check
+  const isAiConfigured = useMemo(() => {
+    return state.visionProvider === 'cosmos'
+      ? (!!state.nvidiaNimUrl && !!state.nvidiaApiKey)
+      : !!state.apiKey;
+  }, [state.visionProvider, state.nvidiaNimUrl, state.nvidiaApiKey, state.apiKey]);
   const [isMcCalculating, setIsMcCalculating] = useState(false);
 
   const roverRef = useRef();
@@ -140,9 +148,15 @@ export default function SimulationApp() {
 
   // V16: MANUAL INTENT PLANNING - Only calculate when user asks
   const triggerAiPlanning = useCallback(async () => {
-    if (planningInProgressRef.current || isAiPlanning || !terrainData || !state.apiKey) return;
+    // v3.3.2: Use unified isAiConfigured check
+    if (planningInProgressRef.current || isAiPlanning || !terrainData || !isAiConfigured) {
+      if (!isAiConfigured && !isAiPlanning) {
+        dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: AI PLANNER OFFLINE. (MISSING CREDENTIALS)", type: 'warning' } });
+      }
+      return;
+    }
 
-    const planningKey = `${state.terrainSeed}_${state.aiModel}_${state.apiKey}`;
+    const planningKey = `${state.terrainSeed}_${state.aiModel}_${isAiConfigured}`;
     if (lastPlannedSeed.current === planningKey && waypoints.length > 0) return; // Already planned for this map
 
     console.log(`[AI] Start Strategic Planning for seed: ${state.terrainSeed}`);
@@ -409,7 +423,10 @@ export default function SimulationApp() {
   }, [handlePlanRoute]);
 
   const handleTelemetry = useCallback((data) => {
-    setTelemetry(prev => ({ ...prev, ...data }));
+    // v3.3.1: Only update React state every 2 frames for HUD performance
+    if (renderTicksRef.current % 2 === 0) {
+      setTelemetry(prev => ({ ...prev, ...data }));
+    }
   }, []);
 
   useEffect(() => {
@@ -434,13 +451,17 @@ export default function SimulationApp() {
         }
 
         // V0.8.34: REAL-TIME LIDAR SCAN (Visual Feed)
+        // v3.3.1: Throttle update frequency (Every 5 frames is enough for HUD)
         if (state.navigationOverlay || state.driveMode === DRIVE_MODES.AUTOPILOT) {
-          const rawLidar = getLidarData(telemetryRef.current.position, telemetryRef.current.rotation, terrainData);
-          setLidarScan(rawLidar);
+          if (renderTicksRef.current % 5 === 0) {
+            const rawLidar = getLidarData(telemetryRef.current.position, telemetryRef.current.rotation, terrainData);
+            setLidarScan(rawLidar);
+          }
         } else if (lidarScan) {
           setLidarScan(null);
         }
       }
+      renderTicksRef.current++;
       frame = requestAnimationFrame(loop);
     };
     frame = requestAnimationFrame(loop);
@@ -531,8 +552,8 @@ export default function SimulationApp() {
           nvidiaApiKey: state.nvidiaApiKey
         };
 
-        // AI Autopilot Logic (Call GEMINI only if not busy)
-        if (state.apiKey && !isAiAutopilotRunningRef.current) {
+        // AI Autopilot Logic (Call AI only if configured and not busy)
+        if (isAiConfigured && !isAiAutopilotRunningRef.current) {
           isAiAutopilotRunningRef.current = true;
           const aiStartTime = performance.now();
           getAutopilotCommand(state.apiKey, aiState, state.aiModel)
@@ -578,7 +599,12 @@ export default function SimulationApp() {
         const isStale = currentLatency > 4000;
 
         let cmd;
-        if (state.apiKey && aiCommandRef.current && aiCommandRef.current.reasoning && !aiCommandRef.current.reasoning.includes("AUTOPILOT_FATAL") && !isStale) {
+        const isAiCommandValid = aiCommandRef.current &&
+          aiCommandRef.current.reasoning &&
+          !aiCommandRef.current.reasoning.includes("AUTOPILOT_FATAL") &&
+          !aiCommandRef.current.reasoning.includes("AI_PIPELINE_STALLED");
+
+        if (isAiConfigured && isAiCommandValid && !isStale) {
           cmd = aiCommandRef.current;
           inputRef.current.brake = false;
           if (lastAiSourceRef.current !== 'ai') {
@@ -596,7 +622,7 @@ export default function SimulationApp() {
           }
 
           if (lastAiSourceRef.current !== 'core') {
-            const reason = !state.apiKey ? "NO_API_KEY" : (isStale ? "LATENCY_CRITICAL" : "AI_STALLED");
+            const reason = !isAiConfigured ? "NOT_CONFIGURED" : (isStale ? "LATENCY_CRITICAL" : "AI_STALLED");
             dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: AI_LINK_LOST (${reason}). UNSEEN CORE (DIGITAL TWIN) ACTIVATED.`, type: 'warning' } });
             lastAiSourceRef.current = 'core';
           }
@@ -736,12 +762,16 @@ export default function SimulationApp() {
     }
   }, []);
 
-  // Capture frame right before AI autopilot run
+  // Capture frame right before AI autopilot run (v3.3.0: Optimized frequency to prevent hangs)
   useEffect(() => {
-    if (state.driveMode === DRIVE_MODES.AUTOPILOT && state.visionProvider === 'cosmos' && !isAiAutopilotRunningRef.current) {
-      handleCaptureFrame();
+    // v3.3.2: Only capture if AI is configured! Fixes flickering.
+    if (state.driveMode === DRIVE_MODES.AUTOPILOT && state.visionProvider === 'cosmos' && isAiConfigured && !isAiAutopilotRunningRef.current) {
+      const interval = setInterval(() => {
+        handleCaptureFrame();
+      }, 1000); // 1 FPS for preview/inference is plenty and saves 95% CPU
+      return () => clearInterval(interval);
     }
-  }, [state.driveMode, state.visionProvider, handleCaptureFrame]);
+  }, [state.driveMode, state.visionProvider, handleCaptureFrame, isAiConfigured]);
 
   return (
     <SimulationContext.Provider value={state}>
@@ -796,7 +826,7 @@ export default function SimulationApp() {
             failReason={state.failReason}
             navigationOverlay={state.navigationOverlay}
             safetyScore={state.safetyScore}
-            isAiOnline={!!state.apiKey}
+            isAiOnline={isAiConfigured}
             isAiPlanning={isAiPlanning}
             isMcCalculating={state.monteCarloResults?.recalculating}
             aiQuote={aiQuote}
@@ -805,7 +835,7 @@ export default function SimulationApp() {
               const prevOverlay = state.navigationOverlay;
               dispatch({ type: 'TOGGLE_NAV_OVERLAY' });
               // V0.9.47: AUTO-PLAN ON OVERLAY (If no route exists)
-              if (!prevOverlay && waypoints.length === 0 && !isAiPlanning && state.apiKey) {
+              if (!prevOverlay && waypoints.length === 0 && !isAiPlanning && isAiConfigured) {
                 triggerAiPlanning();
               }
             }}

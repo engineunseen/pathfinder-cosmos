@@ -1,4 +1,4 @@
-// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.2.0)
+// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.3.2)
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as THREE from 'three';
 
@@ -64,6 +64,7 @@ export class VisionProvider {
     }
 
     async _callCosmos(prompt, base64Image) {
+        if (!this.url) throw new Error("NVIDIA NIM Endpoint URL not configured.");
         // NVIDIA NIM is OpenAI-compatible (v1/chat/completions)
         const endpoint = `${this.url.replace(/\/$/, '')}/v1/chat/completions`;
 

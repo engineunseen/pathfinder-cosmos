@@ -134,7 +134,8 @@ export function Earth() {
 }
 
 // ============================================================
-// BEACON — v3.2.0: Cyan mast + Floating Rhombus Rings
+// ============================================================
+// BEACON — v3.3.1: Cyan mast + Static Base Rings + Floating Rhombus
 // ============================================================
 export function Beacon({ position }) {
     const coreRef = useRef();
@@ -149,10 +150,10 @@ export function Beacon({ position }) {
         const currentY = 93 + Math.sin(t * 1.5) * 2.5;
         if (coreRef.current) coreRef.current.position.y = currentY;
 
-        // Base rings rotation
-        if (ring1Ref.current) ring1Ref.current.rotation.z = t * 0.4;
-        if (ring2Ref.current) ring2Ref.current.rotation.z = -t * 0.3;
-        if (ring3Ref.current) ring3Ref.current.rotation.z = t * 0.2;
+        // Base rings rotation — v3.3.1: Disabled per user request (Static rings)
+        // if (ring1Ref.current) ring1Ref.current.rotation.z = t * 0.4;
+        // if (ring2Ref.current) ring2Ref.current.rotation.z = -t * 0.3;
+        // if (ring3Ref.current) ring3Ref.current.rotation.z = t * 0.2;
 
         // v3.2.0: Crystal rings rotation
         if (crystalRing1Ref.current) {
@@ -222,28 +223,28 @@ export function Beacon({ position }) {
                 </mesh>
             </group>
 
-            {/* v3.0.1: THREE BASE RINGS at the foot of the beacon */}
+            {/* v3.3.1: THREE STATIC BASE RINGS at the foot of the beacon flagpole (Y=-5) */}
             {/* Ring 1 — Cyan (Smallest) */}
-            <group ref={ring1Ref} position={[0, 1.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <group ref={ring1Ref} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                 <mesh>
                     <torusGeometry args={[14, 0.4, 12, 64]} />
                     <meshStandardMaterial color="#00FFFF" emissive="#00FFFF" emissiveIntensity={15} toneMapped={false} />
                 </mesh>
             </group>
 
-            {/* Ring 2 — Deep Cyan/Green (Medium) */}
-            <group ref={ring2Ref} position={[0, 1.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            {/* Ring 2 — Pure Green (Medium) — v3.3.1 Upgrade */}
+            <group ref={ring2Ref} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                 <mesh>
                     <torusGeometry args={[18, 0.5, 12, 64]} />
-                    <meshStandardMaterial color="#00FFCC" emissive="#00FFCC" emissiveIntensity={12} toneMapped={false} />
+                    <meshStandardMaterial color="#00FF00" emissive="#00FF00" emissiveIntensity={12} toneMapped={false} />
                 </mesh>
             </group>
 
-            {/* Ring 3 — Vivid Magenta (Largest) */}
-            <group ref={ring3Ref} position={[0, 1.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            {/* Ring 3 — Pure Red (Largest) — v3.3.1: Match antenna ball exactly */}
+            <group ref={ring3Ref} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                 <mesh>
                     <torusGeometry args={[23, 0.6, 12, 64]} />
-                    <meshStandardMaterial color="#FF00BB" emissive="#FF00BB" emissiveIntensity={10} toneMapped={false} />
+                    <meshStandardMaterial color="#FF0000" emissive="#FF0000" emissiveIntensity={10} toneMapped={false} />
                 </mesh>
             </group>
 

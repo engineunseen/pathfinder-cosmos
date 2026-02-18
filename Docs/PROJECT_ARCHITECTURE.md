@@ -1,4 +1,4 @@
-**Version:** v3.2.0
+**Version:** v3.3.2
 **Date:** February 19, 2026
 **Engine:** React + Three.js + Cannon.js + Gemini 3.0
 
@@ -88,7 +88,7 @@ This project demonstrates a "Cognitive Bridge" where **Generative Intelligence**
 - ALWAYS log raw AI responses to ensure transparency.
 
 **Version Tagging:**
-- Updated in `HUD.jsx` and `store.js`. Current: **v3.2.0**.
+- Updated in `HUD.jsx` and `store.js`. Current: **v3.3.2**.
 
 ---
 **Restoration Guide:**
