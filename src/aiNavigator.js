@@ -1,4 +1,4 @@
-// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.3.5)
+// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.3.42)
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as THREE from 'three';
 
@@ -12,13 +12,32 @@ export const f2 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(2) : '0
 // ============================================================
 
 /**
- * Captures the current Three.js canvas as a base64 PNG.
- * NOTE: App's Canvas must have gl={{ preserveDrawingBuffer: true }}
+ * Captures and resizes the current Three.js canvas.
+ * Downscaling to 512px significantly improves inference speed and prevents 400 errors.
  */
-export function captureSimulationFrame(gl) {
+export function captureSimulationFrame(gl, maxDim = 512) {
     try {
         if (!gl || !gl.domElement) return null;
-        return gl.domElement.toDataURL('image/png').split(',')[1];
+        const canvas = gl.domElement;
+
+        // Create offscreen canvas for resizing
+        const offscreen = document.createElement('canvas');
+        let width = canvas.width;
+        let height = canvas.height;
+
+        if (width > height) {
+            if (width > maxDim) { height *= maxDim / width; width = maxDim; }
+        } else {
+            if (height > maxDim) { width *= maxDim / height; height = maxDim; }
+        }
+
+        offscreen.width = width;
+        offscreen.height = height;
+        const ctx = offscreen.getContext('2d');
+        ctx.drawImage(canvas, 0, 0, width, height);
+
+        // JPEG is smaller and more compatible with NIM PIL loaders
+        return offscreen.toDataURL('image/jpeg', 0.8).split(',')[1];
     } catch (e) {
         console.error("Frame capture failed:", e);
         return null;
@@ -45,18 +64,19 @@ export class VisionProvider {
     }
 
     async _callGemini(prompt, base64Image) {
+        if (!this.apiKey || this.apiKey.length < 5) throw new Error("GEMINI_KEY_MISSING");
         const genAI = new GoogleGenerativeAI(this.apiKey);
         const model = genAI.getGenerativeModel({
-            model: this.model || "gemini-3-flash-preview",
+            model: this.model || GEMINI_MODEL,
             generationConfig: {
-                temperature: this.type === 'autopilot' ? 0.1 : 0.8,
-                maxOutputTokens: 2048,
+                maxOutputTokens: 1024,
+                temperature: 0.2,
                 responseMimeType: this.targetMimeType || "text/plain"
             }
         });
 
         const content = base64Image
-            ? [prompt, { inlineData: { data: base64Image, mimeType: "image/png" } }]
+            ? [prompt, { inlineData: { data: base64Image, mimeType: "image/jpeg" } }]
             : [prompt];
 
         const result = await model.generateContent(content);
@@ -65,30 +85,35 @@ export class VisionProvider {
 
     async _callCosmos(prompt, base64Image) {
         if (!this.url) throw new Error("NVIDIA NIM Endpoint URL not configured.");
-        // NVIDIA NIM is OpenAI-compatible (v1/chat/completions)
-        const endpoint = `${this.url.replace(/\/$/, '')}/v1/chat/completions`;
 
-        const messages = [
-            {
-                role: "user",
-                content: [
-                    { type: "text", text: prompt },
-                    {
-                        type: "image_url",
-                        image_url: { url: `data:image/png;base64,${base64Image}` }
-                    }
-                ]
-            }
-        ];
+        const baseUrl = this.url.replace(/\/$/, '').replace(/\/v1$/, '');
+        const endpoint = `${baseUrl}/v1/chat/completions`;
+
+        // Determine real target for proxy (if using one)
+        // If the URL is localhost, it's a proxy, and it needs x-target-url to know where to go.
+        // We assume the user put the real NIM URL in the apiKey field if they are using the proxy.
+        const isProxy = this.url.includes('localhost') || this.url.includes('127.0.0.1');
+        const targetUrl = isProxy ? this.apiKey : this.url;
+
+        const content = [{ type: "text", text: prompt }];
+        if (base64Image && base64Image !== 'null') {
+            content.push({
+                type: "image_url",
+                image_url: { url: `data:image/jpeg;base64,${base64Image}` }
+            });
+        }
+
+        const messages = [{ role: "user", content: content }];
 
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey || 'nv-nim-dummy'}`
+                'Authorization': `Bearer ${this.apiKey || 'nv-nim-dummy'}`,
+                'x-target-url': targetUrl
             },
             body: JSON.stringify({
-                model: "nvidia/cosmos-1-0-reasoning", // Internal NIM model name
+                model: this.model || "nvidia/Cosmos-Reason2-2B",
                 messages: messages,
                 max_tokens: 1024,
                 temperature: 0.2,
@@ -97,8 +122,19 @@ export class VisionProvider {
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`NVIDIA NIM HTTP ${response.status}: ${err}`);
+            const errText = await response.text().catch(() => "Unknown Error");
+            if (response.status === 404) {
+                try {
+                    const modelsBase = endpoint.replace('/chat/completions', '');
+                    const modelsRes = await fetch(`${modelsBase}/models`, {
+                        headers: { 'Authorization': `Bearer ${this.apiKey || 'nv-nim-dummy'}`, 'x-target-url': targetUrl }
+                    });
+                    const modelsData = await modelsRes.json();
+                    const modelNames = modelsData.data?.map(m => m.id).join(", ") || "none";
+                    console.warn(`🛰️ [COSMOS DISCOVERY]: Available models: [ ${modelNames} ]`);
+                } catch (e) { }
+            }
+            throw new Error(`NIM_HTTP_${response.status}: ${errText.substring(0, 100)}`);
         }
 
         const data = await response.json();
@@ -110,7 +146,12 @@ export class VisionProvider {
 // LEVEL 1: STRATEGIC PLANNER (Astro-Core Architecture)
 // ============================================================
 
-export async function planStrategicRoute(apiKey, heightData, startPos, targetPos, terrainSize, waypointCount, model = 'gemini-3-pro-preview', language = 'EN') {
+export async function planStrategicRoute(apiKey, heightData, startPos, targetPos, terrainSize, waypointCount, model = 'gemini-3-pro-preview', language = 'EN', state = {}) {
+    // PROTECTIVE GUARD: If path-following is disabled, ARCHITECT must NOT run.
+    if (state.aiUsePath === false) {
+        return { waypoints: [], quote: "ARCHITECT: STANDBY.", reasoning: "Manual override: Strategic path following disabled.", isAi: false };
+    }
+
     if (!apiKey) return { waypoints: [], quote: "FATAL: Navigation SDK Offline.", reasoning: "CRITICAL: Mission Architect cannot initialize.", isAi: false };
 
     const fullDataUrl = heightmapToImage(heightData);
@@ -133,27 +174,38 @@ WORLD COORDINATES:
 - TARGET BEACON: [${f1(targetPos[0])}, ${f1(targetPos[2])}]
 
 MISSION LOGIC:
-1. STRATEGIC ANALYSIS: Conduct a deep technical analysis of regolith density and slope variance. 
-2. TRAJECTORY LOGIC: Explain path deviations based on traction vs. gradient physics. 
-3. OUTPUT FORMAT: Strictly valid JSON. Plan exactly ${waypointCount} waypoints.
+1. STRATEGIC ANALYSIS: Conduct a deep technical analysis of regolith density and slope variance. Identify specific topographic hazards (crater rims, basaltic ridges, boulder fields). 
+2. TRAJECTORY LOGIC: Explain path deviations based on traction vs. gradient physics. Use 'No Straight Lines' philosophy.
+3. OUTPUT FORMAT: Strictly valid JSON. Plan exactly ${waypointCount} granular waypoints.
 
 ### 2. SCIENTIFIC SPECIALIST (Astronomy)
 Goal: Provide a single, unique, mind-blowing astronomical quote or status alert to inspire the crew.
+- GOAL: Focus on 'cool' and 'mind-blowing' cosmos facts (black holes, pulsar dynamics, galactic chemistry).
+- AVOID: Dry regolith geology, historic clichés, or generic poetry.
+- PERSONALITY: Technically brilliant but engaging. A 'Cool Astronomer' persona.
 
 JSON SCHEMA:
 {
   "waypoints": [[x, z], ...], 
-  "reasoning": "[Detailed technical topography analysis]",
+  "reasoning": "[Technical report. Detailed topography analysis, physics constraints (gradient variance, regolith density), and pathfinding logic.]",
   "quote": "[A mission-appropriate scientific quote on astronomy/astrophysics]"
 }
-`;
+
+CONSTRAINTS:
+- PERSONALITY: High-level Mission Architect. Technically dense. Aggressive safety margins. Use terms: 'regolith', 'basaltic', 'thermal bloom', 'gradient variance', 'isostatic balance'.
+- FORBIDDEN: Historical clichés, Armstrong, or poetic metaphors.`;
 
     try {
         const provider = new VisionProvider({
-            type: 'gemini', // Strategy always uses Gemini/Image map for now
-            apiKey: apiKey,
+            type: state.visionProvider || 'gemini',
+            apiKey: state.visionProvider === 'gemini' ? (apiKey || state.apiKey) : state.nvidiaApiKey,
+            url: state.nvidiaNimUrl,
             model: model
         });
+
+        if (provider.type === 'gemini') {
+            provider.targetMimeType = "application/json";
+        }
 
         const text = await provider.generateContent(textPrompt, base64Image);
         return parseResponse(text, startPos, targetPos, terrainSize);
@@ -166,43 +218,60 @@ JSON SCHEMA:
 // LEVEL 2: TACTICAL AUTOPILOT (Local Space Transform v0.9.37)
 // ============================================================
 
-export async function getAutopilotCommand(apiKey, state, aiModel = 'gemini-3-flash-preview') {
-    const position = state.position || [0, 0, 0];
-    const velocity = state.velocity || [0, 0, 0];
-    const rotation = state.rotation || [0, 0, 0];
-    const { terrainData, relBearing, targetDistance } = state;
+export async function getAutopilotCommand(apiKey, state, aiModel = 'nvidia/Cosmos-Reason2-2B') {
+    const {
+        position, velocity, rotation, targetPos, nextWaypoints,
+        sCVaR, SMaR, fanSummary, currentWaypoint, wheelsOnGround,
+        terrainData, mcSummary, currentPathWaypoints, relBearing, targetDistance
+    } = state;
 
     const lidarSweep = getLidarData(position, rotation, terrainData);
-    const distToBoundary = terrainData ? (terrainData.size / 2) - Math.max(Math.abs(position[0]), Math.abs(position[2])) : 100;
-    const boundaryWarning = distToBoundary < 15 ? `!!! CRITICAL: MAP BOUNDARY AT ${f1(distToBoundary)}m !!!` : "Clear";
+
+    // v3.3.35: Precise boundary vectoring
+    const bSize = (terrainData?.size / 2) || 100;
+    const dists = {
+        "+X (RIGHT)": bSize - position[0],
+        "-X (LEFT)": position[0] + bSize,
+        "+Z (BACK)": bSize - position[2],
+        "-Z (FRONT)": position[2] + bSize
+    };
+    const closestSide = Object.entries(dists).sort((a, b) => a[1] - b[1])[0];
+    const boundaryWarning = closestSide[1] < 15 ? `!!! MAP BOUNDARY ${closestSide[0]} AT ${f1(closestSide[1])}m !!!` : "Clear";
 
     const sensorOverlay = `
 ### SENSOR OVERLAY (INTELLIGENCE):
-- MONTE-CARLO RISK: ${state.mcSummary || "No Data"}
-- ARCHITECT PATH: ${state.currentPathWaypoints || "No Data"}
+- MONTE-CARLO RISK: ${mcSummary || "No Data"}
+- ARCHITECT PATH: ${currentPathWaypoints || "No Data"}
 `;
 
-    const textPrompt = `You are the CYBER-PILOT of UNSEEN-1 (150kg, 6-wheel Lunar Rover).
-    
-PHYSICAL CAPABILITIES:
-- High inertia, slow steering response. Rapid counter-steering causes instability.
-- Independent motors: Reverse is possible but slow.
-    
-KINETIC CONTEXT:
-- ANTICIPATED BEARING: ${f1(relBearing)}° (Target location in future-space)
-- BEACON DISTANCE: ${f1(targetDistance)}m
-- CURRENT SPEED: ${f1(new THREE.Vector3(...velocity).length() * 3.6)} km/h
-- LIDAR: ${lidarSweep}
-- BOUNDARY: ${boundaryWarning}
-${(state.useMonteCarlo || state.usePath) ? sensorOverlay : ""}
+    const textPrompt = `You are the Tactical Guide (Autopilot). MISSION: Execute the strategic route while navigating complex lunar physics (inertia, low gravity, ballistics).
 
-MISSION DIRECTIVES:
-1. SURVIVAL FIRST: If LIDAR shows obstacle < 5m, you MUST maneuver/reverse regardless of target.
-2. BEARING SENSITIVITY: Near target (<15m), bearing angles become highly sensitive/noisy due to latency. Prioritize consistent forward momentum and small steering adjustments. 
-3. MOMENTUM MANAGEMENT: Do not trigger REVERSE (-0.5) just because of bearing jitter. Only use it for deliberate repositioning if target is clearly missed or blocked.
-4. STRATEGIC ALIGNMENT: Use the ARCHITECT PATH as a loose guide, but prioritize LIDAR for immediate local safety. 
+TELEMETRY CONTEXT:
+- POSITION: [${f2(position[0])}, ${f2(position[2])}] - Current coordinates in meters.
+- VELOCITY: [${f2(velocity[0])}, ${f2(velocity[2])}] - Current speed vector.
+- BEYOND HORIZON (TARGET): [${f1(targetPos[0])}, ${f1(targetPos[1])}] - The final destination.
+- MISSION ROUTE (SPLINE): ${nextWaypoints ? nextWaypoints.map(p => `[${f1(p[0])}, ${f1(p[1])}]`).join(', ') : "None"} - Your mandatory path. You MUST stay within 5m of this line.
 
-JSON ONLY: {"steer": -1 to 1, "throttle": -1 to 1, "reasoning": "string"}`;
+KINETIC METRICS (SENSORY LAYER):
+- sCVaR: Stochastic Conditional Value at Risk. Scale 0 (Safe) to 100 (Wrecked). Probability of a mission-ending event (roll/collision). Current: ${f1(sCVaR)}
+- SMaR: Stability Margin at Risk. Distance in meters to the nearest rollover threshold. HIGH is safe, LOW (<10m) is critical. Current: ${f1(SMaR)}m
+- VENNIK FAN: ${fanSummary ? fanSummary : "No Data"} - Monte Carlo predictive futures. Green lines = Success paths. Red lines = Catastrophic failure.
+- LIDAR TOPO SWEEP: ${lidarSweep}
+
+OPERATIONAL DIRECTIVE:
+1. PHASE ANALYSIS: 
+   - IF wheelsOnGround < 3: INERTIAL PHASE (Ballistics). Steering is ineffective. Reasoning must focus on mass distribution and roll-compensation.
+   - IF wheelsOnGround >= 3: KINETIC PHASE. Dynamic traction control active.
+2. MISSION PRIORITY: Your primary goal is to reach the target by following the MISSION ROUTE. If you deviate to avoid a hazard, you MUST return to the route as soon as it is safe.
+3. KINETIC BODY AWARENESS: You are a physics entity with 6 wheels. Analyze contact patches and the 'Vennik' fan as your proprietary nervous system.
+4. COGNITIVE REASONING: Adapt to lunar inertia. Reason about your own mass-velocity vector. Avoid oscillations.
+5. METRIC-DRIVEN CONTROL: Prioritize Metrics over speed. If sCVaR > 40, reduce throttle. If SMaR < 10, steer away from the risk vector.
+
+JSON SCHEMA: {steer, throttle, reasoning}.
+TERMS: 'ballistic arc', 'contact patch', 'inertial drift', 'mass vector', 'torque modulation'.
+
+GOAL: REACH CURRENT WAYPOINT [${f1(currentWaypoint[0])}, ${f1(currentWaypoint[1])}].
+OUTPUT JSON ONLY: { "steer": -1.0 to 1.0, "throttle": 0.0 to 1.0, "reasoning": "..." }`;
 
     try {
         const provider = new VisionProvider({
@@ -255,7 +324,7 @@ function validateCmd(cmd) {
 // ============================================================
 
 export function getLidarData(position, rotation, terrainData) {
-    if (!position || !rotation || !terrainData || !terrainData.heightmap) return "OFFLINE";
+    if (!position || !rotation || !terrainData || !terrainData.heightData) return "OFFLINE";
     const directions = [0, 90, 180, 270];
     let sweep = "";
     directions.forEach(deg => {
@@ -268,9 +337,11 @@ export function getLidarData(position, rotation, terrainData) {
         const v = (z + halfSize) / terrainData.size;
         if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
             const idx = Math.floor(v * 256) * 257 + Math.floor(u * 256);
-            const h = terrainData.heightmap[idx] * (terrainData.maxHeight || 40);
-            sweep += `${deg}°:${f1(h - position[1])}m `;
-        } else sweep += `${deg}°:WALL `;
+            const h = terrainData.heightData[idx];
+            sweep += `[${deg}deg: ${h.toFixed(1)}m] `;
+        } else {
+            sweep += `[${deg}deg: OUT] `;
+        }
     });
     return sweep;
 }

@@ -136,8 +136,12 @@ export default function SimulationApp() {
   const planningInProgressRef = useRef(false); // Atomic lock
   const lastAiReasoningRef = useRef(""); // V0.8.23: Deduplication for terminal logs
   const lastAiLogTimeRef = useRef(0);    // V0.8.26: Frequency control
-  const [currentLatency, setCurrentLatency] = useState(1000); // V0.9.25: Dynamic RTT tracking in ms
   const lastAiSourceRef = useRef(null); // V0.9.46: Track AI vs Core driver for logging
+  const aiCommandRef = useRef(null); // v3.3.38: Unified access
+  const lastAiCommandsRef = useRef([]); // v3.3.38: Tactical memory
+  const isAiAutopilotRunningRef = useRef(false);
+  const lastAutopilotCallTimeRef = useRef(0); // v3.3.37: Throttle for 1s
+  const [currentLatency, setCurrentLatency] = useState(1000); // V0.9.25: Dynamic RTT tracking min 1s
   const targetDistance = useMemo(() => {
     if (!telemetry.position || !terrainData || !terrainData.beacon) return 0;
     return Math.sqrt(
@@ -146,12 +150,18 @@ export default function SimulationApp() {
     );
   }, [telemetry.position, terrainData.beacon, terrainData.size]);
 
-  // V16: MANUAL INTENT PLANNING - Only calculate when user asks
+  const lastPlanAttemptTime = useRef(0);
   const triggerAiPlanning = useCallback(async () => {
+    // v3.3.19: Throttled planning to avoid proxy spamming
+    const now = Date.now();
+    if (now - lastPlanAttemptTime.current < 2000) return; // Wait 2s
+    lastPlanAttemptTime.current = now;
+
     // v3.3.2: Use unified isAiConfigured check
-    if (planningInProgressRef.current || isAiPlanning || !terrainData || !isAiConfigured) {
-      if (!isAiConfigured && !isAiPlanning) {
-        dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: AI PLANNER OFFLINE. (MISSING CREDENTIALS)", type: 'warning' } });
+    // v3.3.11: If path following is disabled or model is not configured, do not start
+    if (planningInProgressRef.current || isAiPlanning || !terrainData || !isAiConfigured || !state.aiUsePath) {
+      if (!isAiConfigured && !isAiPlanning && state.aiUsePath) {
+        dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: AI PLANNER OFFLINE.", type: 'warning' } });
       }
       return;
     }
@@ -190,7 +200,8 @@ export default function SimulationApp() {
         terrainData.size,
         state.waypointCount,
         state.aiModel,
-        aiLang
+        aiLang,
+        state
       );
 
       if (result && lastPlannedSeed.current === planningKey) {
@@ -260,10 +271,11 @@ export default function SimulationApp() {
       !isAiPlanning &&
       state.simulationState === 'running' &&
       terrainData &&
-      state.apiKey) {
+      state.apiKey &&
+      state.aiUsePath) { // v3.3.11: Must check aiUsePath
       triggerAiPlanning();
     }
-  }, [state.driveMode, state.simulationState, waypoints.length, isAiPlanning, terrainData, state.apiKey, triggerAiPlanning]);
+  }, [state.driveMode, state.simulationState, waypoints.length, isAiPlanning, terrainData, state.apiKey, triggerAiPlanning, state.aiUsePath]);
 
   // Monte Carlo state
   const [monteCarloTrajectories, setMonteCarloTrajectories] = useState(null);
@@ -300,10 +312,6 @@ export default function SimulationApp() {
   const mcWorkerRef = useRef(null);
 
   // AI Navigation state
-  // AI Navigation state
-  const aiCommandRef = useRef(null); // V0.9.26: Init null for cold start fallback
-  const lastAiCommandsRef = useRef([]); // V0.9.24: Tactical Memory array
-  const isAiAutopilotRunningRef = useRef(false);
 
   // Sync telemetry ref
   useEffect(() => {
@@ -540,6 +548,12 @@ export default function SimulationApp() {
           targetDistance: targetDistance,
           wheelsOnGround: telemetryRef.current.wheelsOnGround,
           targetPos: [terrainData.beacon.x, terrainData.beacon.z],
+          // v3.3.40: Integration of High-Fidelity Risk Data (Prompt Protocol v1.5)
+          sCVaR: riskMetrics.sCVaR,
+          SMaR: riskMetrics.SMaR,
+          fanSummary: summarizeFan(monteCarloTrajectories),
+          nextWaypoints: waypoints ? waypoints.slice(currentWaypointIdx, currentWaypointIdx + 5) : [],
+          currentWaypoint: (waypoints && waypoints.length > 0) ? waypoints[currentWaypointIdx] : [terrainData.beacon.x, terrainData.beacon.z],
           terrainData: terrainData,
           commandHistory: lastAiCommandsRef.current,
           latency: currentLatency,
@@ -553,17 +567,17 @@ export default function SimulationApp() {
         };
 
         // AI Autopilot Logic (Call AI only if configured and not busy)
-        if (isAiConfigured && !isAiAutopilotRunningRef.current) {
+        // v3.3.37: Enforce 1s throttle to prevent over-steering on fast models like Cosmos
+        const timeSinceLastAi = performance.now() - lastAutopilotCallTimeRef.current;
+        if (isAiConfigured && !isAiAutopilotRunningRef.current && timeSinceLastAi > 1000) {
           isAiAutopilotRunningRef.current = true;
+          lastAutopilotCallTimeRef.current = performance.now();
           const aiStartTime = performance.now();
-          getAutopilotCommand(state.apiKey, aiState, state.aiModel)
+
+          getAutopilotCommand(state.visionProvider === 'gemini' ? state.apiKey : state.nvidiaApiKey, aiState, state.aiModel)
             .then(cmd => {
               const rtt = Math.round(performance.now() - aiStartTime);
-              setCurrentLatency(rtt); // Update for next cycle
-              if (rtt > 5000) {
-                dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: High latency detected (${rtt}ms). AI is calculating future path...`, type: 'warning' } });
-              }
-
+              setCurrentLatency(rtt);
               aiCommandRef.current = cmd;
 
               // Updates Tactical Memory (keep last 3 commands)
@@ -574,7 +588,7 @@ export default function SimulationApp() {
 
               const now = Date.now();
               const isNewReasoning = cmd.reasoning && cmd.reasoning !== lastAiReasoningRef.current;
-              const isTimeElapsed = now - lastAiLogTimeRef.current > 10000; // 10 seconds
+              const isTimeElapsed = now - lastAiLogTimeRef.current > 10000;
 
               if (isNewReasoning || isTimeElapsed) {
                 lastAiReasoningRef.current = cmd.reasoning;
@@ -582,13 +596,12 @@ export default function SimulationApp() {
                 dispatch({ type: 'ADD_LOG', payload: { text: `AI AUTOPILOT: ${cmd.reasoning}`, type: 'info' } });
               }
 
-              // V0.9.11: Log RAW RESPONSE on failure for debugging
               if (cmd.raw && (cmd.reasoning.startsWith('PARSE_FAIL') || cmd.reasoning.includes('JSON Parse Error'))) {
                 dispatch({ type: 'ADD_LOG', payload: { text: `RAW_AI_OUTPUT: ${cmd.raw}`, type: 'warning' } });
               }
             })
             .catch(err => {
-              dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: AI Deadlock prevented - core script failure. Attempting recovery...`, type: 'critical' } });
+              dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: AI Deadlock prevented - core script failure.", type: 'critical' } });
               console.error("AI Autopilot Error:", err);
             })
             .finally(() => { isAiAutopilotRunningRef.current = false; });

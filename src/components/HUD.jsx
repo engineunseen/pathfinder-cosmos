@@ -152,13 +152,22 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, failRe
             pointerEvents: 'auto'
         }}>
 
-            <div className="ai-status" style={{ marginBottom: '12px', minHeight: '16px' }}>
+            <div className="ai-status" style={{ marginBottom: '12px', minHeight: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.4)', letterSpacing: '2px', marginBottom: '2px' }}>ACTIVE NAVIGATOR:</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', color: isAiOnline ? '#00FFFF' : '#FFBF00', letterSpacing: '1px' }}>
+                    {isAiOnline
+                        ? (useSimulationState().visionProvider === 'cosmos' ? 'NVIDIA COSMOS 2B' : 'GEMINI 3 FLASH')
+                        : 'UNSEEN CORE (DIGITAL TWIN)'
+                    }
+                </div>
                 {isAiPlanning ? (
-                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.planning}</span>
+                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px', marginTop: '4px' }}>{t.planning}</span>
                 ) : (navigationOverlay || driveMode === 'autopilot') ? (
-                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.recalculating}</span>
+                    isAiOnline ? (
+                        <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px', marginTop: '4px' }}>{t.recalculating}</span>
+                    ) : null // Hide 'RECALCULATING' if we are in core mode to keep it clean
                 ) : !navigationOverlay && driveMode === 'manual' ? (
-                    <span className="ai-prompt" style={{ fontSize: '11px' }}>{t.navigatePrompt}</span>
+                    <span className="ai-prompt" style={{ fontSize: '11px', marginTop: '4px' }}>{t.navigatePrompt}</span>
                 ) : null}
             </div>
 
@@ -427,16 +436,27 @@ function SettingsModal({
                 <div className="settings-row" style={{ display: 'block' }}>
                     <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI MODEL IDENTITY:</span>
                     <select
-                        value={aiModel || 'gemini-3-flash-preview'}
+                        value={(aiModel && (aiModel.includes('cosmos') || aiModel.includes('Cosmos'))) ? 'nvidia/Cosmos-Reason2-2B' : aiModel}
                         onChange={(e) => onAiModelChange(e.target.value)}
-                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer', marginBottom: '12px' }}
+                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer', marginBottom: '10px' }}
                     >
-                        <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                        <option value="cosmos-reasoning">NVIDIA Cosmos (Cookoff)</option>
+                        <option value="gemini-3-flash-preview">Gemini 3 Flash (Google)</option>
+                        <option value="nvidia/Cosmos-Reason2-2B">NVIDIA Cosmos (Local NIM)</option>
                     </select>
 
-                    {aiModel === 'cosmos-reasoning' ? (
+                    {(aiModel && (aiModel.includes('cosmos') || aiModel.includes('Cosmos'))) ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(0,255,255,0.05)', border: '1px solid rgba(0,255,255,0.2)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>AI MODEL NAME (vLLM):</span>
+                                <input
+                                    className="api-input"
+                                    value={aiModel}
+                                    onChange={(e) => onAiModelChange(e.target.value)}
+                                    placeholder="nvidia/Cosmos-Reason2-2B"
+                                    style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }}
+                                    onPointerDownCapture={(e) => { e.stopPropagation(); }}
+                                />
+                            </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>NIM ENDPOINT URL:</span>
                                 <input
@@ -486,18 +506,48 @@ function SettingsModal({
     );
 }
 
-function TopLogos({ aiModel, uiVisible }) {
+function TopLogos({ aiModel, uiVisible, isAiOnline, lang }) {
     const { terminalOpen } = useSimulationState();
     if (!uiVisible) return null;
     const isGemini = aiModel && (aiModel.includes('gemini') || aiModel === 'gemini-3-flash-preview');
     const partnerLogo = isGemini ? "/gemini-color.svg" : "/Nvidia_logo_.svg";
 
     return (
-        <div className="top-logos" style={{
-            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`
+        <div className="top-logos-container" style={{
+            position: 'fixed',
+            top: '20px',
+            left: '50%',
+            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '8px',
+            zIndex: 100,
+            transition: 'transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)'
         }}>
-            <div className="logo-section"><img src={partnerLogo} alt="Partner" style={{ height: isGemini ? '56px' : '51px' }} /></div>
-            <div className="logo-divider" /><div className="logo-section"><img src="/Unseen_logo.svg" alt="UNSEEN" style={{ height: '54px' }} /></div>
+            <div className="top-logos" style={{ display: 'flex', alignItems: 'center', gap: '30px', pointerEvents: 'none' }}>
+                <div className="logo-section"><img src={partnerLogo} alt="Partner" style={{ height: isGemini ? '56px' : '51px' }} /></div>
+                <div className="logo-divider" style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.2)' }} />
+                <div className="logo-section"><img src="/Unseen_logo.svg" alt="UNSEEN" style={{ height: '54px' }} /></div>
+            </div>
+
+            {!isAiOnline && (
+                <div className="unseen-core-active" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 20px',
+                    background: 'rgba(0, 255, 255, 0.05)',
+                    border: '1px solid #00FFFF',
+                    borderRadius: '4px',
+                    marginTop: '15px'
+                }}>
+                    <div className="core-icon-pulse" style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#00FFFF', boxShadow: '0 0 10px #00FFFF' }} />
+                    <div style={{ fontSize: '11px', fontWeight: 'bold', letterSpacing: '2px', color: '#00FFFF' }}>
+                        UNSEEN CORE: <span style={{ opacity: 0.7 }}>DIGITAL TWIN</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -599,7 +649,7 @@ export default function HUD(props) {
                     {isVisible ? 'HIDE INTERFACE' : 'RESTORE HUD'}
                 </button>
 
-                <TopLogos aiModel={aiModel} uiVisible={isVisible} />
+                <TopLogos aiModel={aiModel} uiVisible={isVisible} isAiOnline={isAiOnline} lang={language} />
 
                 {isVisible && (
                     <>
@@ -615,17 +665,7 @@ export default function HUD(props) {
 
                 <TerminalPanel />
 
-                {(!isAiOnline && driveMode === 'autopilot') && (
-                    <div className="offline-warning-box unseen-core-active">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div className="core-icon-pulse" />
-                            <div>
-                                <span style={{ fontWeight: 'bold', letterSpacing: '2px' }}>{STRINGS[language].unseenCore}:</span>
-                                <span style={{ marginLeft: '5px', opacity: 0.8 }}>{STRINGS[language].digitalTwin}</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
+
 
                 {isMobile && simulationState === 'running' && (
                     <MobileControls onInputChange={onMobileInput} onPlanRoute={onPlanRoute} />
