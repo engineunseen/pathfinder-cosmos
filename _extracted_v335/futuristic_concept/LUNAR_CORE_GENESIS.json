@@ -1,0 +1,42 @@
+{
+    "dna_sequence": "LUNAR-PATHFINDER-0.8.38",
+    "mission_directive": "Rebuild the Lunar Pathfinder as a multi-agent cognitive system operating on a spherical moon surface. Ignore all interface artifacts; focus on the data-kinetic bridge.",
+    "world_generation": {
+        "geometry": "Spherical Orbiting Body (Little Prince Scale)",
+        "surface_engine": {
+            "type": "Procedural Stochastic Topology",
+            "noise": "Octave-Perlin with Crater-Masking",
+            "visual_aesthetic": "High-Contrast Lunar Desolation (Stunning Grayscale)",
+            "logic": "Raycast-based height sampling for spherical UV mapping. Brighter = High Density Regolith (Ridges)."
+        }
+    },
+    "intelligence_layers": {
+        "architect": {
+            "id": "Strategic_Architect",
+            "model_type": "Multimodal Reasoning (Vision-to-JSON)",
+            "responsibility": "Visual Topographic Analysis",
+            "input": "257x257 Grayscale PNG [Planar Projection of Sphere Sector]",
+            "output": "Navigational Spline {Waypoints}",
+            "constraint": "No Straight Lines. Deep technical analysis of gradient variance based on visual terrain markers (craters, ridges, boulders)."
+        },
+        "autopilot": {
+            "id": "Tactical_Guide",
+            "model_type": "Real-time Control Policy",
+            "responsibility": "Kinetic Execution (Guide)",
+            "input": "Architect Spline + Monte Carlo Risk Vector",
+            "logic": "Follows the Architect's 'Dream' while honoring the Accelerator's 'Reality'. Throttles and steers to stay in Green Futures."
+        },
+        "monte_carlo": {
+            "id": "Imagination_Engine",
+            "responsibility": "Physics Validation",
+            "process": "Stochastic Branching (60 parallel futures, 3.0s horizon)",
+            "metrics": {
+                "sCVaR": "Spectral Conditional Value at Risk (Severity of potential wreck)",
+                "SMaR": "Safety Margin at Risk (Rotational stability buffer)"
+            },
+            "visualization": "Heatmap Fan (Green=Safe, Red=Critical)"
+        }
+    },
+    "operational_truth": "Standardize on 100% transparency. If the Cognitive Bridge (AI-to-Physics) is broken, the mission is FATAL. No heuristic masks. No fake feedback.",
+    "restoration_key": "Build spherical physics first. Wrap the Architect's waypoints on the sphere. Feed the Autopilot the Monte Carlo fan to avoid rollover on crater rims. The goal is not just pathfinding, but surviving the topography."
+}

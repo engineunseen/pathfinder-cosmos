@@ -2,7 +2,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v3.3.50";
+export const VERSION = "v3.3.5";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -49,21 +49,21 @@ export const getInitialState = () => ({
     shadowContrast: 0.5,
     chromaticAberration: false,
     apiKey: localStorage.getItem('pathfinder_api_key') || '',
-    aiModel: localStorage.getItem('pathfinder_ai_model') || 'gemini-3-flash-preview',
+    aiModel: 'gemini-3-flash-preview',
     logs: [{ id: Date.now(), text: "SYSTEM: INITIALIZING NAVIGATION STACK...", type: 'info' }],
     waypointCount: 7,
     terminalOpen: false,
     isCalibrationMode: false,
     uiVisible: true,
     arrivalAccuracy: 5.0,
-    aiUseMonteCarlo: localStorage.getItem('pathfinder_use_mc') !== 'false',
-    aiUsePath: localStorage.getItem('pathfinder_use_path') === 'true', // Default to false
+    aiUseMonteCarlo: true,
+    aiUsePath: true,
     helpOpen: false,
     terrainMode: 'legacy', // 'legacy' | 'naturalist' | 'ethereal'
     // v3.1.0: Vision Provider settings
-    visionProvider: localStorage.getItem('pathfinder_vision_provider') || 'gemini', // 'gemini' | 'cosmos'
-    nvidiaNimUrl: localStorage.getItem('pathfinder_nvidia_url') || '',
-    nvidiaApiKey: localStorage.getItem('pathfinder_nvidia_key') || '',
+    visionProvider: 'gemini', // 'gemini' | 'cosmos'
+    nvidiaNimUrl: '',
+    nvidiaApiKey: '',
 });
 
 function simulationReducer(state, action) {
@@ -152,13 +152,6 @@ function simulationReducer(state, action) {
                 ...getInitialState(),
                 language: state.language,
                 apiKey: state.apiKey,
-                visionProvider: state.visionProvider,
-                nvidiaNimUrl: state.nvidiaNimUrl,
-                nvidiaApiKey: state.nvidiaApiKey,
-                waypointCount: state.waypointCount,
-                aiModel: state.aiModel,
-                aiUsePath: state.aiUsePath,
-                aiUseMonteCarlo: state.aiUseMonteCarlo,
                 brightness: state.brightness,
                 shadowContrast: state.shadowContrast,
                 chromaticAberration: state.chromaticAberration,
@@ -178,13 +171,6 @@ function simulationReducer(state, action) {
                 ...getInitialState(),
                 language: state.language,
                 apiKey: state.apiKey,
-                visionProvider: state.visionProvider,
-                nvidiaNimUrl: state.nvidiaNimUrl,
-                nvidiaApiKey: state.nvidiaApiKey,
-                waypointCount: state.waypointCount,
-                aiModel: state.aiModel,
-                aiUsePath: state.aiUsePath,
-                aiUseMonteCarlo: state.aiUseMonteCarlo,
                 brightness: state.brightness,
                 shadowContrast: state.shadowContrast,
                 chromaticAberration: state.chromaticAberration,
@@ -206,31 +192,19 @@ function simulationReducer(state, action) {
         case 'SET_API_KEY':
             localStorage.setItem('pathfinder_api_key', action.payload);
             return { ...state, apiKey: action.payload };
-        case 'SET_AI_MODEL': {
-            let finalModel = action.payload;
-            // Normalize shorthand aliases
-            if (finalModel === 'cosmos-reasoning') finalModel = 'nvidia/Cosmos-Reason2-2B';
-            const isCosmos = finalModel.toLowerCase().includes('cosmos');
-            const isGemini31 = finalModel.includes('3.1');
-            localStorage.setItem('pathfinder_ai_model', finalModel);
-            localStorage.setItem('pathfinder_vision_provider', isCosmos ? 'cosmos' : 'gemini');
-            // Human-readable model name for log
-            let modelLabel = finalModel;
-            if (finalModel === 'gemini-3-flash-preview') modelLabel = 'GEMINI 3 FLASH';
-            else if (finalModel === 'gemini-3.1-pro-preview') modelLabel = 'GEMINI 3.1 PRO';
-            else if (isCosmos) modelLabel = 'NVIDIA COSMOS';
+        case 'SET_AI_MODEL':
+            const isCosmos = action.payload === 'cosmos-reasoning';
             return {
                 ...state,
-                aiModel: finalModel,
+                aiModel: action.payload,
                 visionProvider: isCosmos ? 'cosmos' : 'gemini',
                 logs: [{
                     id: Date.now(),
-                    text: `SYSTEM: ENGINE SWITCHED → [${modelLabel.toUpperCase()}]${isGemini31 ? ' ★ NEW MODEL ★' : ''}`,
+                    text: `SYSTEM: AI ARCHITECT SWITCHED TO [${action.payload.toUpperCase()}]`,
                     type: 'info',
                     timestamp: new Date().toLocaleTimeString()
                 }, ...state.logs].slice(0, 50)
             };
-        }
         case 'SET_WAYPOINT_COUNT':
             return { ...state, waypointCount: action.payload };
         case 'TOGGLE_CALIBRATION':
@@ -255,23 +229,18 @@ function simulationReducer(state, action) {
         case 'SET_ARRIVAL_ACCURACY':
             return { ...state, arrivalAccuracy: action.payload };
         case 'SET_AI_USE_MC':
-            localStorage.setItem('pathfinder_use_mc', action.payload);
             return { ...state, aiUseMonteCarlo: action.payload };
         case 'SET_AI_USE_PATH':
-            localStorage.setItem('pathfinder_use_path', action.payload);
             return { ...state, aiUsePath: action.payload };
         case 'TOGGLE_HELP':
             return { ...state, helpOpen: !state.helpOpen };
         case 'SET_TERRAIN_MODE':
             return { ...state, terrainMode: action.payload };
         case 'SET_VISION_PROVIDER':
-            localStorage.setItem('pathfinder_vision_provider', action.payload);
             return { ...state, visionProvider: action.payload };
         case 'SET_NVIDIA_NIM_URL':
-            localStorage.setItem('pathfinder_nvidia_url', action.payload);
             return { ...state, nvidiaNimUrl: action.payload };
         case 'SET_NVIDIA_API_KEY':
-            localStorage.setItem('pathfinder_nvidia_key', action.payload);
             return { ...state, nvidiaApiKey: action.payload };
         case 'SET_TARGET_DISTANCE':
             return { ...state, targetDistance: action.payload };

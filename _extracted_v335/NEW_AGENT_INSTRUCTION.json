@@ -1,0 +1,45 @@
+{
+    "mission_context": {
+        "project": "UNSEEN PATHFINDER (v0.9.35)",
+        "goal": "Закрепить стабильную работу агента АВТОПИЛОТ (Tactical Guide) на базе Gemini 3.0 Flash.",
+        "current_status": "CRITICAL PARSING ERROR (см. скриншот в задаче)",
+        "error_description": "Агент генерирует валидный JSON (видно `steer`, `throttle`), но парсер `aiNavigator.js` выбрасывает исключение `PARSE_ERR`. Это означает, что несмотря на наличие JSON, он может быть окружен невидимыми символами, либо иметь неожиданный формат (например, Markdown ```json), который текущий парсер не обрабатывает корректно.",
+        "model_constraint": "СТРОГО ЗАПРЕЩЕНО использование моделей Gemini 1.5. Разрешено только `gemini-3-flash-preview`."
+    },
+    "technical_brief": {
+        "file_path": "src/aiNavigator.js",
+        "function": "getAutopilotCommand",
+        "parsing_function": "parseAutopilotResponse",
+        "input_data": {
+            "lidar": "Raycast 8 directions (0-315 degrees), 5m/10m range.",
+            "telemetry": "Position [X,Z], Velocity, WheelsOnGround count.",
+            "monte_carlo_metrics": "sCVaR (Risk 0-100), SMaR (Stability Margin in meters).",
+            "route": "Next spline waypoints list."
+        },
+        "expected_output": {
+            "format": "JSON Object",
+            "fields": {
+                "steer": "float (-1.0 to 1.0)",
+                "throttle": "float (-1.0 to 1.0)",
+                "reasoning": "string"
+            }
+        }
+    },
+    "task_instruction": {
+        "action": "FIX_JSON_PARSING",
+        "steps": [
+            "1. Изучить функцию `parseAutopilotResponse` в `src/aiNavigator.js`.",
+            "2. Увидеть проблему: текущий парсер (Brace Counting) может сбоить, если модель Gemini 3 Flash добавляет неожиданные префиксы, суффиксы или Markdown-обертку, которую парсер не полностью отрезает.",
+            "3. РЕШЕНИЕ: Переписать парсер на 'Aggressive Extraction' + 'Regex Fallback'. Сначала пробуем `JSON.parse` на подстроке `{...}`. Если падает (из-за кавычек в reasoning), используем Regex для извлечения `steer` и `throttle` напрямую.",
+            "4. ВАЖНО: Добавить `console.log` с сырым ответом (`raw text`) перед парсингом, чтобы в консоли браузера (F12) мы могли точно видеть, что именно присылает модель.",
+            "5. Проверить промпт в `getAutopilotCommand`. Убедиться, что там жестко прописано `resposeMimeType: 'application/json'`."
+        ],
+        "success_criteria": "В HUD (терминале) пропадают красные сообщения `PARSE_ERR`, и появляются корректные значения (например, `Steer: -0.5, Throttle: 0.3`). Ровер начинает ехать сам, даже если JSON 'грязный'."
+    },
+    "related_docs": [
+        "AUTOPILOT_ARCHITECTURE_RU.md",
+        "AI_PROMPT_PROTOCOL.md",
+        "PROJECT_ARCHITECTURE.md",
+        "AUTOPILOT_STATUS_RU.md"
+    ]
+}

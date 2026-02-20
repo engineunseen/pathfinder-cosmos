@@ -152,24 +152,13 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, failRe
             pointerEvents: 'auto'
         }}>
 
-            <div className="ai-status" style={{ marginBottom: '12px', minHeight: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.4)', letterSpacing: '2px', marginBottom: '2px' }}>ACTIVE ENGINE:</div>
-                <div style={{ fontSize: '12px', fontWeight: 'bold', color: isAiOnline ? '#00FFFF' : '#FFBF00', letterSpacing: '1px' }}>
-                    {isAiOnline
-                        ? (useSimulationState().visionProvider === 'cosmos' ? 'NVIDIA COSMOS' : 'GOOGLE GEMINI')
-                        : 'Vision by UNSEEN ENGINE'
-                    }
-                </div>
+            <div className="ai-status" style={{ marginBottom: '12px', minHeight: '16px' }}>
                 {isAiPlanning ? (
-                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px', marginTop: '4px' }}>{t.planning}</span>
+                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.planning}</span>
                 ) : (navigationOverlay || driveMode === 'autopilot') ? (
-                    isAiOnline ? (
-                        <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px', marginTop: '4px' }}>{t.recalculating}</span>
-                    ) : (
-                        <span className="ai-active-text pulse" style={{ color: '#FFBF00', fontSize: '11px', marginTop: '4px' }}>VISION ENGINE ACTIVE</span>
-                    )
+                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px' }}>{t.recalculating}</span>
                 ) : !navigationOverlay && driveMode === 'manual' ? (
-                    <span className="ai-prompt" style={{ fontSize: '11px', marginTop: '4px' }}>{t.navigatePrompt}</span>
+                    <span className="ai-prompt" style={{ fontSize: '11px' }}>{t.navigatePrompt}</span>
                 ) : null}
             </div>
 
@@ -418,52 +407,36 @@ function SettingsModal({
                     </div>
                 </div>
                 <div className="settings-row" style={{ display: 'block' }}>
-                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI NAVIGATION OPTIONS:</span>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI INTELLIGENCE:</span>
                     <button
                         className={`hud-button ${aiUseMonteCarlo ? 'active' : ''}`}
                         style={{ width: '100%', marginBottom: '8px' }}
                         onClick={() => onAiUseMcToggle(!aiUseMonteCarlo)}
                     >
-                        {t.useMonteCarlo} (Smart Sensors)
+                        {t.useMonteCarlo}
                     </button>
                     <button
                         className={`hud-button ${aiUsePath ? 'active' : ''}`}
                         style={{ width: '100%' }}
                         onClick={() => onAiUsePathToggle(!aiUsePath)}
                     >
-                        {t.usePlannedPath} (Follow Architect Path)
+                        {t.usePlannedPath}
                     </button>
-                    <div style={{ fontSize: '9px', color: 'rgba(0,255,255,0.4)', marginTop: '6px', lineHeight: '1.4' }}>
-                        Smart Sensors: enables Vision by UNSEEN ENGINE Monte Carlo fan support.<br />
-                        Follow Path: AI uses Architect route as navigation guide.
-                    </div>
                 </div>
 
                 <div className="settings-row" style={{ display: 'block' }}>
-                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>ENGINE SELECTION:</span>
+                    <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI MODEL IDENTITY:</span>
                     <select
-                        value={(aiModel && (aiModel.includes('cosmos') || aiModel.includes('Cosmos'))) ? 'nvidia/Cosmos-Reason2-2B' : aiModel}
+                        value={aiModel || 'gemini-3-flash-preview'}
                         onChange={(e) => onAiModelChange(e.target.value)}
-                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer', marginBottom: '10px' }}
+                        style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer', marginBottom: '12px' }}
                     >
-                        <option value="gemini-3-flash-preview">Google Gemini 3 Flash</option>
-                        <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro ✦ NEW</option>
-                        <option value="nvidia/Cosmos-Reason2-2B">NVIDIA Cosmos (Local NIM)</option>
+                        <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                        <option value="cosmos-reasoning">NVIDIA Cosmos (Cookoff)</option>
                     </select>
 
-                    {(aiModel && (aiModel.includes('cosmos') || aiModel.includes('Cosmos'))) ? (
+                    {aiModel === 'cosmos-reasoning' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(0,255,255,0.05)', border: '1px solid rgba(0,255,255,0.2)' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>AI MODEL NAME (vLLM):</span>
-                                <input
-                                    className="api-input"
-                                    value={aiModel}
-                                    onChange={(e) => onAiModelChange(e.target.value)}
-                                    placeholder="nvidia/Cosmos-Reason2-2B"
-                                    style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }}
-                                    onPointerDownCapture={(e) => { e.stopPropagation(); }}
-                                />
-                            </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>NIM ENDPOINT URL:</span>
                                 <input
@@ -513,97 +486,18 @@ function SettingsModal({
     );
 }
 
-// Inline SVG Vision Eye Logo (from Unseen Vision brand)
-function VisionEyeLogo({ size = 40 }) {
-    return (
-        <div style={{
-            width: size, height: size,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%)',
-            flexShrink: 0
-        }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width={size * 0.65} height={size * 0.65} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
-                <circle cx="12" cy="12" r="3" />
-            </svg>
-        </div>
-    );
-}
-
-function VisionLogoFull() {
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
-            <VisionEyeLogo size={44} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '22px', fontWeight: 'bold', color: 'white', lineHeight: 1, fontFamily: 'monospace', letterSpacing: '1px' }}>Vision</span>
-                <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.55)', lineHeight: 1, letterSpacing: '2px', textTransform: 'uppercase' }}>by UNSEEN ENGINE</span>
-            </div>
-        </div>
-    );
-}
-
-function TopLogos({ aiModel, uiVisible, isAiOnline, driveMode, lang }) {
-    const { terminalOpen, visionProvider } = useSimulationState();
+function TopLogos({ aiModel, uiVisible }) {
+    const { terminalOpen } = useSimulationState();
     if (!uiVisible) return null;
-
-    // Determine which engine is active
-    // Rule: if AI is online → show AI partner logo + Unseen logo
-    //       if AI is offline → show ONLY Vision by UNSEEN ENGINE logo (AI not active)
-    const isCosmos = visionProvider === 'cosmos';
-    const isGemini = !isCosmos; // Only two AI providers
-    const partnerLogo = isCosmos ? "/Nvidia_logo_.svg" : "/gemini-color.svg";
-    const partnerLogoHeight = isCosmos ? '51px' : '56px';
-
-    // Show autopilot badge only when Vision Engine is driving (not AI)
-    const isVisionDriving = !isAiOnline && driveMode === 'autopilot';
+    const isGemini = aiModel && (aiModel.includes('gemini') || aiModel === 'gemini-3-flash-preview');
+    const partnerLogo = isGemini ? "/gemini-color.svg" : "/Nvidia_logo_.svg";
 
     return (
-        <div className="top-logos-container" style={{
-            position: 'fixed',
-            top: '20px',
-            left: '50%',
-            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '8px',
-            zIndex: 100,
-            transition: 'transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)'
+        <div className="top-logos" style={{
+            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`
         }}>
-            {isAiOnline ? (
-                // AI is configured and active — show partner logo + Unseen logo
-                <div className="top-logos" style={{ display: 'flex', alignItems: 'center', gap: '30px', pointerEvents: 'none' }}>
-                    <div className="logo-section">
-                        <img src={partnerLogo} alt={isCosmos ? 'NVIDIA' : 'Google'} style={{ height: partnerLogoHeight }} />
-                    </div>
-                    <div className="logo-divider" style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.2)' }} />
-                    <div className="logo-section">
-                        <img src="/Unseen_logo.svg" alt="UNSEEN" style={{ height: '54px' }} />
-                    </div>
-                </div>
-            ) : (
-                // AI offline — show ONLY Vision by UNSEEN ENGINE logo
-                <VisionLogoFull />
-            )}
-
-            {/* Autopilot badge — appears only when Vision Engine is navigating */}
-            {isVisionDriving && (
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '5px 16px',
-                    background: 'rgba(99, 102, 241, 0.15)',
-                    border: '1px solid rgba(99, 102, 241, 0.6)',
-                    borderRadius: '4px',
-                }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#8b5cf6', boxShadow: '0 0 8px #8b5cf6', animation: 'pulse 1.5s infinite' }} />
-                    <div style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '2px', color: '#a5b4fc' }}>
-                        Vision by UNSEEN ENGINE <span style={{ opacity: 0.6 }}>PILOTING</span>
-                    </div>
-                </div>
-            )}
+            <div className="logo-section"><img src={partnerLogo} alt="Partner" style={{ height: isGemini ? '56px' : '51px' }} /></div>
+            <div className="logo-divider" /><div className="logo-section"><img src="/Unseen_logo.svg" alt="UNSEEN" style={{ height: '54px' }} /></div>
         </div>
     );
 }
@@ -705,7 +599,7 @@ export default function HUD(props) {
                     {isVisible ? 'HIDE INTERFACE' : 'RESTORE HUD'}
                 </button>
 
-                <TopLogos aiModel={aiModel} uiVisible={isVisible} isAiOnline={isAiOnline} driveMode={driveMode} lang={language} />
+                <TopLogos aiModel={aiModel} uiVisible={isVisible} />
 
                 {isVisible && (
                     <>
@@ -721,7 +615,17 @@ export default function HUD(props) {
 
                 <TerminalPanel />
 
-
+                {(!isAiOnline && driveMode === 'autopilot') && (
+                    <div className="offline-warning-box unseen-core-active">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div className="core-icon-pulse" />
+                            <div>
+                                <span style={{ fontWeight: 'bold', letterSpacing: '2px' }}>{STRINGS[language].unseenCore}:</span>
+                                <span style={{ marginLeft: '5px', opacity: 0.8 }}>{STRINGS[language].digitalTwin}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {isMobile && simulationState === 'running' && (
                     <MobileControls onInputChange={onMobileInput} onPlanRoute={onPlanRoute} />
