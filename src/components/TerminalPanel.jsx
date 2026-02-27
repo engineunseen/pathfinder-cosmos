@@ -9,7 +9,9 @@ const LOG_COLORS = {
 };
 
 export default function TerminalPanel() {
-    const { logs, terminalOpen } = useSimulationState();
+    const state = useSimulationState();
+    const { logs } = state;
+    const terminalOpen = state.ui.terminalOpen;
     const dispatch = useSimulationDispatch();
     const scrollRef = useRef(null);
 

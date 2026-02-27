@@ -168,8 +168,9 @@ function runSimulation(state, isAutopilot) {
                 py = terrainHeight + 0.5;
                 vy = 0;
                 const normal = getNormalAtPosition(terrainData.heightData, terrainData.size, terrainData.segments, px, pz);
-                pitch = pitch * 0.5 + Math.asin(-normal[2]) * 0.5;
-                rollAngle = rollAngle * 0.5 + Math.asin(normal[0]) * 0.5;
+                // V3.3.69: Clamp values to [-1, 1] to prevent NaN generation on steep slopes
+                pitch = pitch * 0.5 + Math.asin(Math.max(-1, Math.min(1, -normal[2]))) * 0.5;
+                rollAngle = rollAngle * 0.5 + Math.asin(Math.max(-1, Math.min(1, normal[0]))) * 0.5;
             }
 
             // Tilt/Slope limits

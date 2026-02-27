@@ -29,7 +29,7 @@ function getTerrainHeight(heightData, worldX, worldZ, size) {
 
 function TrajectoryLine({ path, risk }) {
     const points = useMemo(() => path?.map(p => [p[0], p[1] + 0.05, p[2]]), [path]);
-    if (!points) return null;
+    if (!points || points.length < 2) return null;
     return <Line points={points} color={RISK_COLORS[risk] || RISK_COLORS.safe} lineWidth={0.15} worldUnits={true} transparent opacity={risk === 'critical' ? 0.9 : 0.4} />;
 }
 
@@ -134,7 +134,7 @@ function StrategicRoad({ waypoints, terrainData }) {
 
         return {
             ribbonGeom: geom,
-            perimeter: [...leftArr, baseL, tip, baseR, ...rightArr.reverse()],
+            perimeter: [...leftArr, baseL, tip, baseR, ...rightArr.reverse()].filter(p => p && !isNaN(p.x) && !isNaN(p.y) && !isNaN(p.z)),
             tipPos: tip
         };
     }, [waypoints, terrainData]);

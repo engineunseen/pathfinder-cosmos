@@ -1,4 +1,4 @@
-// components/EarthAndBeacon.jsx — v3.2.0: Restored Crystal Rings + Optimized Earth
+// components/EarthAndBeacon.jsx — v4.0.0: Restored Crystal Rings + Optimized Earth + Destination Signal
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -135,9 +135,10 @@ export function Earth() {
 
 // ============================================================
 // ============================================================
-// BEACON — v3.3.4: Green Crystal Ring + v3.3.3 static base
+// DESTINATION SIGNAL (formerly "Beacon") — Universal Mission Endpoint
+// v4.0.0: Crystal Ring + static base
 // ============================================================
-export function Beacon({ position }) {
+export function Beacon({ position }) {  // Export name kept for import compatibility
     const coreRef = useRef();
     const ring1Ref = useRef();
     const ring2Ref = useRef();
@@ -263,7 +264,7 @@ export function Beacon({ position }) {
                 />
             </mesh>
 
-            {/* Point light */}
+            {/* Point light — destination glow */}
             <pointLight position={[0, 93, 0]} color="#00FFFF" intensity={300} distance={500} />
         </group>
     );

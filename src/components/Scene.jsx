@@ -5,24 +5,31 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls } from '@react-three/drei';
 
-export function CameraController({ targetPosition, enabled, seed, snapPosition }) {
+export function CameraController({ enabled, seed, snapPosition, roverRef }) {
     const { camera, gl } = useThree();
     const controlsRef = useRef();
     const lastSeed = useRef(null); // V1.4.9: Init with null to force initial snap
-    const prevTarget = useRef(new THREE.Vector3(targetPosition[0], targetPosition[1], targetPosition[2]));
+    const prevTarget = useRef(new THREE.Vector3(0, 0, 0));
 
     useFrame((state, delta) => {
         if (!enabled || !controlsRef.current) return;
 
-        const tx = targetPosition[0];
-        const ty = targetPosition[1];
-        const tz = targetPosition[2];
+        let tx = 0;
+        let ty = 0;
+        let tz = 0;
+
+        if (roverRef && roverRef.current && roverRef.current.getState) {
+            const rState = roverRef.current.getState();
+            if (rState && rState.position && Array.isArray(rState.position)) {
+                tx = rState.position[0]; ty = rState.position[1]; tz = rState.position[2];
+            }
+        }
 
         // V1.4.9: UNIVERSAL CAMERA SNAP - Force jump on mount and map refresh
         if (seed !== lastSeed.current) {
-            const sx = snapPosition ? snapPosition[0] : tx;
-            const sy = snapPosition ? snapPosition[1] : ty;
-            const sz = snapPosition ? snapPosition[2] : tz;
+            const sx = (Array.isArray(snapPosition) && snapPosition.length >= 3) ? snapPosition[0] : tx;
+            const sy = (Array.isArray(snapPosition) && snapPosition.length >= 3) ? snapPosition[1] : ty;
+            const sz = (Array.isArray(snapPosition) && snapPosition.length >= 3) ? snapPosition[2] : tz;
 
             camera.position.set(sx + 5, sy + 4, sz + 8);
             controlsRef.current.target.set(sx, sy, sz);
@@ -49,7 +56,7 @@ export function CameraController({ targetPosition, enabled, seed, snapPosition }
     return <OrbitControls ref={controlsRef} args={[camera, gl.domElement]} enableDamping dampingFactor={0.1} />;
 }
 
-export function LunarLighting({ shadowContrast = 0.5, roverPosition = [0, 0, 0] }) {
+export function LunarLighting({ shadowContrast = 0.5, roverRef }) {
     const lightRef = useRef();
     const targetRef = useRef();
     // Contrast slider reduces fill light (ambient + hemi) to darken shadows
@@ -57,7 +64,13 @@ export function LunarLighting({ shadowContrast = 0.5, roverPosition = [0, 0, 0] 
 
     useFrame(() => {
         if (lightRef.current && targetRef.current) {
-            const [x, y, z] = roverPosition;
+            let [x, y, z] = [0, 0, 0];
+            if (roverRef && roverRef.current && roverRef.current.getState) {
+                const rState = roverRef.current.getState();
+                if (rState && rState.position && Array.isArray(rState.position)) {
+                    x = rState.position[0]; y = rState.position[1]; z = rState.position[2];
+                }
+            }
             // Keep light following the rover for consistent shadows
             lightRef.current.position.set(x + 100, y + 80, z - 50);
             targetRef.current.position.set(x, y, z);

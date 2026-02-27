@@ -1,11 +1,9 @@
-// terrain.js — v3.0.1: Multi-mode terrain (legacy / naturalist / ethereal)
-// legacy     = original Pathfinder noise + craters + rocks
-// naturalist = smooth rolling hills with blurred craters (no rocks)
-// ethereal   = monumental sine waves + sinusoidal craters (no rocks)
+// terrain.js — v4.0.0: Configurable resolution terrain generator
+// modes: legacy | naturalist | ethereal
 import { createNoise2D } from 'simplex-noise';
 
 const TERRAIN_SIZE = 200;
-const TERRAIN_SEGMENTS = 256;
+const DEFAULT_SEGMENTS = 256;
 
 // Creates a seeded PRNG (simple mulberry32)
 function mulberry32(a) {
@@ -34,7 +32,7 @@ function generateCraters(rng, count = 15, mode = 'legacy') {
             radius: 4 + rng() * (mode === 'legacy' ? 14 : 18),
             depth: (mode === 'legacy' ? 1.5 : 2.0) + rng() * (mode === 'legacy' ? 4 : 6),
             rimHeight: (mode === 'legacy' ? 0.5 : 0.8) + rng() * 2.5,
-            rimSharpness: 0.3 + rng() * 0.7, // legacy only
+            rimSharpness: 0.3 + rng() * 0.7,
             profile: mode === 'ethereal' ? 'sinusoidal' : (rng() > 0.5 ? 'parabolic' : 'sinusoidal'),
         });
     }
@@ -58,7 +56,8 @@ function generateRocks(rng, count = 60) {
 }
 
 // Get height at world position from the heightmap
-export function getHeightAtPosition(heightData, worldX, worldZ) {
+// segments parameter allows working with different resolution heightmaps
+export function getHeightAtPosition(heightData, worldX, worldZ, segments = DEFAULT_SEGMENTS) {
     const halfSize = TERRAIN_SIZE / 2;
     const normalizedX = (worldX + halfSize) / TERRAIN_SIZE;
     const normalizedZ = (worldZ + halfSize) / TERRAIN_SIZE;
@@ -67,8 +66,8 @@ export function getHeightAtPosition(heightData, worldX, worldZ) {
         return 0;
     }
 
-    const gridX = normalizedX * (TERRAIN_SEGMENTS);
-    const gridZ = normalizedZ * (TERRAIN_SEGMENTS);
+    const gridX = normalizedX * segments;
+    const gridZ = normalizedZ * segments;
 
     const ix = Math.floor(gridX);
     const iz = Math.floor(gridZ);
@@ -76,15 +75,15 @@ export function getHeightAtPosition(heightData, worldX, worldZ) {
     const fz = gridZ - iz;
 
     const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-    const ix0 = clamp(ix, 0, TERRAIN_SEGMENTS);
-    const ix1 = clamp(ix + 1, 0, TERRAIN_SEGMENTS);
-    const iz0 = clamp(iz, 0, TERRAIN_SEGMENTS);
-    const iz1 = clamp(iz + 1, 0, TERRAIN_SEGMENTS);
+    const ix0 = clamp(ix, 0, segments);
+    const ix1 = clamp(ix + 1, 0, segments);
+    const iz0 = clamp(iz, 0, segments);
+    const iz1 = clamp(iz + 1, 0, segments);
 
-    const h00 = heightData[iz0 * (TERRAIN_SEGMENTS + 1) + ix0];
-    const h10 = heightData[iz0 * (TERRAIN_SEGMENTS + 1) + ix1];
-    const h01 = heightData[iz1 * (TERRAIN_SEGMENTS + 1) + ix0];
-    const h11 = heightData[iz1 * (TERRAIN_SEGMENTS + 1) + ix1];
+    const h00 = heightData[iz0 * (segments + 1) + ix0];
+    const h10 = heightData[iz0 * (segments + 1) + ix1];
+    const h01 = heightData[iz1 * (segments + 1) + ix0];
+    const h11 = heightData[iz1 * (segments + 1) + ix1];
 
     const h0 = h00 * (1 - fx) + h10 * fx;
     const h1 = h01 * (1 - fx) + h11 * fx;
@@ -92,12 +91,12 @@ export function getHeightAtPosition(heightData, worldX, worldZ) {
 }
 
 // Get surface normal at world position
-export function getNormalAtPosition(heightData, worldX, worldZ) {
-    const delta = TERRAIN_SIZE / TERRAIN_SEGMENTS;
-    const hL = getHeightAtPosition(heightData, worldX - delta, worldZ);
-    const hR = getHeightAtPosition(heightData, worldX + delta, worldZ);
-    const hD = getHeightAtPosition(heightData, worldX, worldZ - delta);
-    const hU = getHeightAtPosition(heightData, worldX, worldZ + delta);
+export function getNormalAtPosition(heightData, worldX, worldZ, segments = DEFAULT_SEGMENTS) {
+    const delta = TERRAIN_SIZE / segments;
+    const hL = getHeightAtPosition(heightData, worldX - delta, worldZ, segments);
+    const hR = getHeightAtPosition(heightData, worldX + delta, worldZ, segments);
+    const hD = getHeightAtPosition(heightData, worldX, worldZ - delta, segments);
+    const hU = getHeightAtPosition(heightData, worldX, worldZ + delta, segments);
 
     const nx = hL - hR;
     const nz = hD - hU;
@@ -107,38 +106,39 @@ export function getNormalAtPosition(heightData, worldX, worldZ) {
 }
 
 // Get slope angle in degrees at world position
-export function getSlopeAtPosition(heightData, worldX, worldZ) {
-    const normal = getNormalAtPosition(heightData, worldX, worldZ);
+export function getSlopeAtPosition(heightData, worldX, worldZ, segments = DEFAULT_SEGMENTS) {
+    const normal = getNormalAtPosition(heightData, worldX, worldZ, segments);
     return Math.acos(Math.max(0, Math.min(1, normal[1]))) * (180 / Math.PI);
 }
 
 // Generate the complete terrain data
 // mode: 'legacy' | 'naturalist' | 'ethereal'
-export function generateTerrainData(seed, mode = 'legacy') {
+// resolution: number of terrain segments (128, 256, 512)
+export function generateTerrainData(seed, mode = 'legacy', resolution = DEFAULT_SEGMENTS) {
     const isCalibration = seed === 999;
+    const segments = resolution;
 
     const rng = mulberry32(Math.floor(isCalibration ? 1234 : seed));
     const noise2D = createNoise2D(() => rng());
 
     const craters = isCalibration ? [] : generateCraters(rng, 15, mode);
     const rocks = (isCalibration || mode !== 'legacy') ? [] : generateRocks(rng);
-    const heightData = new Float32Array((TERRAIN_SEGMENTS + 1) * (TERRAIN_SEGMENTS + 1));
+    const heightData = new Float32Array((segments + 1) * (segments + 1));
 
     // Build heightmap
-    for (let iz = 0; iz <= TERRAIN_SEGMENTS; iz++) {
-        for (let ix = 0; ix <= TERRAIN_SEGMENTS; ix++) {
-            const worldX = (ix / TERRAIN_SEGMENTS - 0.5) * TERRAIN_SIZE;
-            const worldZ = (iz / TERRAIN_SEGMENTS - 0.5) * TERRAIN_SIZE;
+    for (let iz = 0; iz <= segments; iz++) {
+        for (let ix = 0; ix <= segments; ix++) {
+            const worldX = (ix / segments - 0.5) * TERRAIN_SIZE;
+            const worldZ = (iz / segments - 0.5) * TERRAIN_SIZE;
 
             if (isCalibration) {
-                heightData[iz * (TERRAIN_SEGMENTS + 1) + ix] = 0;
+                heightData[iz * (segments + 1) + ix] = 0;
                 continue;
             }
 
             let height = 0;
 
             if (mode === 'legacy') {
-                // Original: Perlin noise + craters with rim
                 height += noise2D(worldX * 0.008, worldZ * 0.008) * 8;
                 height += noise2D(worldX * 0.02, worldZ * 0.02) * 3;
                 height += noise2D(worldX * 0.06, worldZ * 0.06) * 1;
@@ -158,7 +158,6 @@ export function generateTerrainData(seed, mode = 'legacy') {
                 }
 
             } else if (mode === 'naturalist') {
-                // Smooth rolling hills — blurred craters, no rocks
                 height += noise2D(worldX * 0.007, worldZ * 0.007) * 9.0;
                 height += noise2D(worldX * 0.02, worldZ * 0.02) * 2.5;
                 for (const crater of craters) {
@@ -174,7 +173,6 @@ export function generateTerrainData(seed, mode = 'legacy') {
                 }
 
             } else if (mode === 'ethereal') {
-                // Monumental sine waves + sinusoidal craters
                 height = Math.sin(worldX * 0.03) * Math.cos(worldZ * 0.03) * 9 + Math.sin(worldX * 0.09) * 2.5;
                 height += noise2D(worldX * 0.015, worldZ * 0.015) * 1.5;
                 height += noise2D(worldX * 0.1, worldZ * 0.1) * 0.35;
@@ -189,14 +187,14 @@ export function generateTerrainData(seed, mode = 'legacy') {
                 }
             }
 
-            heightData[iz * (TERRAIN_SEGMENTS + 1) + ix] = height;
+            heightData[iz * (segments + 1) + ix] = height;
         }
     }
 
     // Post-processing: blur for naturalist mode
     if (mode === 'naturalist' && !isCalibration) {
         const blurred = new Float32Array(heightData.length);
-        const dim = TERRAIN_SEGMENTS + 1;
+        const dim = segments + 1;
         for (let iz = 0; iz < dim; iz++) {
             for (let ix = 0; ix < dim; ix++) {
                 let sum = 0, count = 0;
@@ -216,10 +214,10 @@ export function generateTerrainData(seed, mode = 'legacy') {
 
     // Generate Cannon.js heightfield data
     const matrix = [];
-    for (let iz = 0; iz <= TERRAIN_SEGMENTS; iz++) {
+    for (let iz = 0; iz <= segments; iz++) {
         const row = [];
-        for (let ix = 0; ix <= TERRAIN_SEGMENTS; ix++) {
-            row.push(heightData[iz * (TERRAIN_SEGMENTS + 1) + ix]);
+        for (let ix = 0; ix <= segments; ix++) {
+            row.push(heightData[iz * (segments + 1) + ix]);
         }
         matrix.push(row);
     }
@@ -234,7 +232,7 @@ export function generateTerrainData(seed, mode = 'legacy') {
     });
 
     for (const rock of filteredRocks) {
-        rock.y = getHeightAtPosition(heightData, rock.x, rock.z);
+        rock.y = getHeightAtPosition(heightData, rock.x, rock.z, segments);
     }
 
     // Target/Spawn positioning
@@ -258,7 +256,7 @@ export function generateTerrainData(seed, mode = 'legacy') {
         }
     }
 
-    const beaconY = getHeightAtPosition(heightData, beaconX, beaconZ) + 2;
+    const beaconY = getHeightAtPosition(heightData, beaconX, beaconZ, segments) + 2;
 
     return {
         heightData,
@@ -268,8 +266,8 @@ export function generateTerrainData(seed, mode = 'legacy') {
         beacon: { x: beaconX, y: beaconY, z: beaconZ },
         spawn: { x: spawnX, z: spawnZ },
         size: TERRAIN_SIZE,
-        segments: TERRAIN_SEGMENTS,
-        elementSize: TERRAIN_SIZE / TERRAIN_SEGMENTS,
+        segments,
+        elementSize: TERRAIN_SIZE / segments,
         mode,
     };
 }

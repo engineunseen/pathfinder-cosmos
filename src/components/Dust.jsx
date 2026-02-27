@@ -6,7 +6,7 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const MAX_PARTICLES = 600;
+const DEFAULT_MAX_PARTICLES = 600;
 
 // Wheel positions relative to rover chassis (matches Rover.jsx WHEELS)
 const WHEEL_OFFSETS = [
@@ -18,7 +18,8 @@ const WHEEL_OFFSETS = [
     new THREE.Vector3(1.15, -0.45, 1.2),    // RR
 ];
 
-export default function Dust({ roverTelemetry }) {
+export default function Dust({ roverRef, maxParticles = DEFAULT_MAX_PARTICLES }) {
+    const MAX_PARTICLES = maxParticles;
     const meshRef = useRef();
     const dummy = useMemo(() => new THREE.Object3D(), []);
     const spawnTimer = useRef(0);
@@ -26,7 +27,7 @@ export default function Dust({ roverTelemetry }) {
     // Particle pool
     const particles = useRef([]);
     useMemo(() => {
-        particles.current = Array.from({ length: MAX_PARTICLES }, () => ({
+        particles.current = Array.from({ length: maxParticles }, () => ({
             active: false,
             pos: new THREE.Vector3(),
             vel: new THREE.Vector3(),
@@ -42,8 +43,8 @@ export default function Dust({ roverTelemetry }) {
         if (!meshRef.current) return;
 
         // === SPAWN LOGIC ===
-        if (roverTelemetry && roverTelemetry.position && roverTelemetry.velocity) {
-            const { position, velocity, rotation } = roverTelemetry;
+        if (roverRef && roverRef.current && roverRef.current.getState) {
+            const { position, velocity, rotation } = roverRef.current.getState();
 
             const speedVec = new THREE.Vector3(...velocity);
             const speed = speedVec.length();
@@ -158,7 +159,7 @@ export default function Dust({ roverTelemetry }) {
     return (
         <instancedMesh
             ref={meshRef}
-            args={[null, null, MAX_PARTICLES]}
+            args={[null, null, maxParticles]}
             frustumCulled={false}
         >
             {/* Flat disc shape for dust grain, more lunar-looking than box */}

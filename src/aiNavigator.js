@@ -310,7 +310,20 @@ function parseAutopilotResponse(text) {
             const candidate = cleanText.substring(firstOpen, lastClose + 1);
             return validateCmd(JSON.parse(candidate));
         }
-    } catch (e) { /* Fallback handled */ }
+    } catch (e) {
+        // V3.3.70: Fallback for truncated JSON from Gemini 3 Flash
+        console.warn("Autopilot JSON parse failed. Attempting regex extraction.", e);
+        const steerMatch = cleanText.match(/"steer"\s*:\s*([-+]?\d*\.?\d+)/);
+        const throttleMatch = cleanText.match(/"throttle"\s*:\s*([-+]?\d*\.?\d+)/);
+
+        if (steerMatch || throttleMatch) {
+            return validateCmd({
+                steer: steerMatch ? parseFloat(steerMatch[1]) : 0,
+                throttle: throttleMatch ? parseFloat(throttleMatch[1]) : 0,
+                reasoning: "Extracted via Fallback Regex"
+            });
+        }
+    }
     return { steer: 0, throttle: 0, reasoning: "PARSE_ERROR" };
 }
 
@@ -330,7 +343,8 @@ function validateCmd(cmd) {
 
 export function getLidarData(position, rotation, terrainData) {
     if (!position || !rotation || !terrainData || !terrainData.heightData) return "OFFLINE";
-    const directions = [0, 90, 180, 270];
+    // V3.3.72: Adjusted direction rays to forward 45 degree arcs instead of full 90
+    const directions = [0, 45, -45, 90, -90];
     let sweep = "";
     directions.forEach(deg => {
         const rad = (deg * Math.PI) / 180 + rotation[1];
@@ -343,7 +357,9 @@ export function getLidarData(position, rotation, terrainData) {
         if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
             const idx = Math.floor(v * 256) * 257 + Math.floor(u * 256);
             const h = terrainData.heightData[idx];
-            sweep += `[${deg}deg: ${h.toFixed(1)}m] `;
+            // Format to show relative to current height
+            const relH = h - position[1];
+            sweep += `[${deg}deg: ${dist}m away, RelH: ${relH > 0 ? '+' : ''}${relH.toFixed(1)}m] `;
         } else {
             sweep += `[${deg}deg: OUT] `;
         }

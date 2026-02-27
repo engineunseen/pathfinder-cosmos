@@ -1,8 +1,9 @@
-// store.js — Lightweight global state manager using React context-free approach
+// store.js — Structured state manager with domain separation
+// v4.0.0: Architecture refactoring — domain-grouped state
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v3.3.50";
+export const VERSION = "v4.0.0";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -26,255 +27,273 @@ export const DRIVE_MODES = {
     AUTOPILOT: 'autopilot',
 };
 
+// Terrain resolution presets
+export const TERRAIN_RESOLUTIONS = {
+    LOW: 128,
+    MEDIUM: 256,
+    HIGH: 512,
+};
+
+// Dust density presets
+export const DUST_DENSITIES = {
+    LOW: 200,
+    MEDIUM: 600,
+    HIGH: 1200,
+};
+
 // ======== INITIAL STATE GENERATOR ========
 export const getInitialState = () => ({
-    language: 'EN',
-    driveMode: DRIVE_MODES.MANUAL,
-    navigationOverlay: false,
-    speed: 0,
-    pitch: 0,
-    roll: 0,
-    battery: 100,
-    targetDistance: 0,
-    simulationState: 'running',
-    failReason: '',
-    safetyScore: 100,
-    elapsedTime: 0,
-    terrainSeed: Math.random() * 10000,
+    // ── GRAPHICS DOMAIN ──
+    graphics: {
+        brightness: parseFloat(localStorage.getItem('pf_brightness')) || 1.2,
+        shadowContrast: parseFloat(localStorage.getItem('pf_shadow')) || 0.5,
+        chromaticAberration: localStorage.getItem('pf_chromatic') === 'true',
+        terrainMode: localStorage.getItem('pf_terrain_mode') || 'legacy',
+        terrainResolution: parseInt(localStorage.getItem('pf_terrain_res')) || TERRAIN_RESOLUTIONS.MEDIUM,
+        dustDensity: parseInt(localStorage.getItem('pf_dust_density')) || DUST_DENSITIES.MEDIUM,
+    },
+
+    // ── AI DOMAIN ──
+    ai: {
+        apiKey: localStorage.getItem('pathfinder_api_key') || '',
+        aiModel: localStorage.getItem('pathfinder_ai_model') || 'gemini-3-flash-preview',
+        visionProvider: localStorage.getItem('pathfinder_vision_provider') || 'gemini',
+        nvidiaNimUrl: localStorage.getItem('pathfinder_nvidia_url') || '',
+        nvidiaApiKey: localStorage.getItem('pathfinder_nvidia_key') || '',
+        aiUseMonteCarlo: localStorage.getItem('pathfinder_use_mc') !== 'false',
+        aiUsePath: localStorage.getItem('pathfinder_use_path') === 'true',
+        waypointCount: 7,
+    },
+
+    // ── MISSION DOMAIN ──
+    mission: {
+        driveMode: DRIVE_MODES.MANUAL,
+        simulationState: 'running',
+        failReason: '',
+        navigationOverlay: false,
+        terrainSeed: Math.random() * 10000,
+        isCalibrationMode: false,
+        arrivalAccuracy: 5.0,
+    },
+
+    // ── UI DOMAIN ──
+    ui: {
+        language: 'EN',
+        terminalOpen: false,
+        uiVisible: true,
+        helpOpen: false,
+    },
+
+    // ── TELEMETRY (volatile, not persisted) ──
+    telemetry: {
+        speed: 0,
+        pitch: 0,
+        roll: 0,
+        battery: 100,
+        targetDistance: 0,
+        safetyScore: 100,
+        elapsedTime: 0,
+        roverPosition: [0, 2, 0],
+        roverRotation: [0, 0, 0],
+    },
+
+    // ── RUNTIME STATE ──
     monteCarloResults: null,
-    roverPosition: [0, 2, 0],
-    roverRotation: [0, 0, 0],
     inputState: { forward: 0, backward: 0, left: 0, right: 0, brake: false },
-    brightness: 1.2,
-    shadowContrast: 0.5,
-    chromaticAberration: false,
-    apiKey: localStorage.getItem('pathfinder_api_key') || '',
-    aiModel: localStorage.getItem('pathfinder_ai_model') || 'gemini-3-flash-preview',
     logs: [{ id: Date.now(), text: "SYSTEM: INITIALIZING NAVIGATION STACK...", type: 'info' }],
-    waypointCount: 7,
-    terminalOpen: false,
-    isCalibrationMode: false,
-    uiVisible: true,
-    arrivalAccuracy: 5.0,
-    aiUseMonteCarlo: localStorage.getItem('pathfinder_use_mc') !== 'false',
-    aiUsePath: localStorage.getItem('pathfinder_use_path') === 'true', // Default to false
-    helpOpen: false,
-    terrainMode: 'legacy', // 'legacy' | 'naturalist' | 'ethereal'
-    // v3.1.0: Vision Provider settings
-    visionProvider: localStorage.getItem('pathfinder_vision_provider') || 'gemini', // 'gemini' | 'cosmos'
-    nvidiaNimUrl: localStorage.getItem('pathfinder_nvidia_url') || '',
-    nvidiaApiKey: localStorage.getItem('pathfinder_nvidia_key') || '',
 });
 
+// ======== HELPERS ========
+function saveGraphics(key, val) { localStorage.setItem(key, val); }
+
+function createLog(text, type = 'info') {
+    return { id: Date.now() + Math.random(), text, type, timestamp: new Date().toLocaleTimeString() };
+}
+
+function addLog(state, text, type = 'info') {
+    return [createLog(text, type), ...state.logs].slice(0, 50);
+}
+
+// ======== REDUCER ========
 function simulationReducer(state, action) {
     switch (action.type) {
+        // ── LOGS ──
         case 'ADD_LOG':
-            const newLog = {
-                id: Date.now() + Math.random(),
-                text: action.payload.text,
-                type: action.payload.type || 'info',
-                image: action.payload.image,
-                timestamp: new Date().toLocaleTimeString()
-            };
             return {
                 ...state,
-                logs: [newLog, ...state.logs].slice(0, 50)
+                logs: [createLog(action.payload.text, action.payload.type || 'info', action.payload.image), ...state.logs].slice(0, 50)
             };
         case 'CLEAR_LOGS':
             return { ...state, logs: [] };
+
+        // ── UI DOMAIN ──
         case 'SET_LANGUAGE':
-            return { ...state, language: action.payload };
-        case 'TOGGLE_AUTOPILOT':
-            const isManual = state.driveMode === DRIVE_MODES.MANUAL;
-            const logText = isManual ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED";
-            const updatedLogs = [{
-                id: Date.now(),
-                text: logText,
-                type: isManual ? 'warning' : 'info',
-                timestamp: new Date().toLocaleTimeString()
-            }, ...state.logs].slice(0, 50);
+            return { ...state, ui: { ...state.ui, language: action.payload } };
+        case 'TOGGLE_TERMINAL':
+            return { ...state, ui: { ...state.ui, terminalOpen: !state.ui.terminalOpen } };
+        case 'TOGGLE_UI':
+            return { ...state, ui: { ...state.ui, uiVisible: !state.ui.uiVisible } };
+        case 'TOGGLE_HELP':
+            return { ...state, ui: { ...state.ui, helpOpen: !state.ui.helpOpen } };
+
+        // ── MISSION DOMAIN ──
+        case 'TOGGLE_AUTOPILOT': {
+            const isManual = state.mission.driveMode === DRIVE_MODES.MANUAL;
             return {
                 ...state,
-                driveMode: isManual ? DRIVE_MODES.AUTOPILOT : DRIVE_MODES.MANUAL,
-                logs: updatedLogs
+                mission: { ...state.mission, driveMode: isManual ? DRIVE_MODES.AUTOPILOT : DRIVE_MODES.MANUAL },
+                logs: addLog(state, isManual ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED", isManual ? 'warning' : 'info')
             };
+        }
         case 'SET_DRIVE_MODE':
-            const modeText = action.payload === DRIVE_MODES.AUTOPILOT ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED";
             return {
                 ...state,
-                driveMode: action.payload,
-                logs: [{
-                    id: Date.now(),
-                    text: modeText,
-                    type: action.payload === DRIVE_MODES.AUTOPILOT ? 'warning' : 'info',
-                    timestamp: new Date().toLocaleTimeString()
-                }, ...state.logs].slice(0, 50)
+                mission: { ...state.mission, driveMode: action.payload },
+                logs: addLog(state, action.payload === DRIVE_MODES.AUTOPILOT ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED", action.payload === DRIVE_MODES.AUTOPILOT ? 'warning' : 'info')
             };
         case 'TOGGLE_NAV_OVERLAY':
-            const isOverlayOn = !state.navigationOverlay;
             return {
                 ...state,
-                navigationOverlay: isOverlayOn,
-                logs: [{
-                    id: Date.now(),
-                    text: isOverlayOn ? "SYSTEM: MONTE CARLO OVERLAY ACTIVATED" : "SYSTEM: MONTE CARLO OVERLAY DEACTIVATED",
-                    type: 'info',
-                    timestamp: new Date().toLocaleTimeString()
-                }, ...state.logs].slice(0, 50)
+                mission: { ...state.mission, navigationOverlay: !state.mission.navigationOverlay },
+                logs: addLog(state, !state.mission.navigationOverlay ? "SYSTEM: MONTE CARLO OVERLAY ACTIVATED" : "SYSTEM: MONTE CARLO OVERLAY DEACTIVATED")
             };
-        case 'SET_BRIGHTNESS':
-            return { ...state, brightness: action.payload };
-        case 'SET_SHADOW_CONTRAST':
-            return { ...state, shadowContrast: action.payload };
-        case 'TOGGLE_CHROMATIC':
-            return { ...state, chromaticAberration: !state.chromaticAberration };
-        case 'UPDATE_TELEMETRY':
-            return { ...state, ...action.payload };
-        case 'SET_SIMULATION_STATE':
-            const targetState = action.payload.state || action.payload; // Handle both 'success' and {state: 'failed', reason: '...'}
+        case 'SET_SIMULATION_STATE': {
+            const targetState = action.payload.state || action.payload;
             const targetReason = action.payload.reason || '';
             const simLog = targetState === 'success'
-                ? "MISSION: SUCCESS - BEACON REACHED"
-                : `MISSION: TERMINATED - ${targetReason.toUpperCase() || 'STABILITY BREACH'}`;
+                ? "MISSION: SUCCESS — SIGNAL BEACON REACHED"
+                : `MISSION: TERMINATED — ${targetReason.toUpperCase() || 'STABILITY BREACH'}`;
             return {
                 ...state,
-                simulationState: targetState,
-                failReason: targetReason,
-                logs: [{
-                    id: Date.now(),
-                    text: simLog,
-                    type: action.payload.state === 'success' ? 'info' : 'critical',
-                    timestamp: new Date().toLocaleTimeString()
-                }, ...state.logs].slice(0, 50)
+                mission: { ...state.mission, simulationState: targetState, failReason: targetReason },
+                logs: addLog(state, simLog, targetState === 'success' ? 'info' : 'critical')
             };
+        }
+        case 'SET_ARRIVAL_ACCURACY':
+            return { ...state, mission: { ...state.mission, arrivalAccuracy: action.payload } };
+
+        // ── RESET & TERRAIN ──
         case 'RESET_SIMULATION':
             return {
                 ...getInitialState(),
-                language: state.language,
-                apiKey: state.apiKey,
-                visionProvider: state.visionProvider,
-                nvidiaNimUrl: state.nvidiaNimUrl,
-                nvidiaApiKey: state.nvidiaApiKey,
-                waypointCount: state.waypointCount,
-                aiModel: state.aiModel,
-                aiUsePath: state.aiUsePath,
-                aiUseMonteCarlo: state.aiUseMonteCarlo,
-                brightness: state.brightness,
-                shadowContrast: state.shadowContrast,
-                chromaticAberration: state.chromaticAberration,
-                driveMode: DRIVE_MODES.MANUAL, // Force manual
-                navigationOverlay: false,      // Force overlay off
-                terrainSeed: state.terrainSeed, // Keeps the map
-                terrainMode: state.terrainMode, // v3.0.2: Preserve mode
-                logs: [{
-                    id: Date.now(),
-                    text: "SYSTEM: RESTARTING MISSION...",
-                    type: 'info',
-                    timestamp: new Date().toLocaleTimeString()
-                }, ...state.logs].slice(0, 50)
+                graphics: state.graphics, // ← Entire domain preserved
+                ai: state.ai,
+                ui: state.ui,
+                mission: {
+                    ...state.mission,
+                    driveMode: DRIVE_MODES.MANUAL,
+                    navigationOverlay: false,
+                    simulationState: 'running',
+                    failReason: '',
+                },
+                logs: addLog(state, "SYSTEM: RESTARTING MISSION...")
             };
         case 'NEW_TERRAIN':
             return {
                 ...getInitialState(),
-                language: state.language,
-                apiKey: state.apiKey,
-                visionProvider: state.visionProvider,
-                nvidiaNimUrl: state.nvidiaNimUrl,
-                nvidiaApiKey: state.nvidiaApiKey,
-                waypointCount: state.waypointCount,
-                aiModel: state.aiModel,
-                aiUsePath: state.aiUsePath,
-                aiUseMonteCarlo: state.aiUseMonteCarlo,
-                brightness: state.brightness,
-                shadowContrast: state.shadowContrast,
-                chromaticAberration: state.chromaticAberration,
-                driveMode: DRIVE_MODES.MANUAL,
-                navigationOverlay: false,
-                terrainSeed: Math.random() * 10000,
-                terrainMode: state.terrainMode, // v3.0.2: Preserve mode
-                logs: [{
-                    id: Date.now(),
-                    text: "SYSTEM: LANDSCAPE GENERATED.",
-                    type: 'info',
-                    timestamp: new Date().toLocaleTimeString()
-                }]
+                graphics: state.graphics,
+                ai: state.ai,
+                ui: state.ui,
+                mission: {
+                    ...state.mission,
+                    driveMode: DRIVE_MODES.MANUAL,
+                    navigationOverlay: false,
+                    simulationState: 'running',
+                    failReason: '',
+                    terrainSeed: Math.random() * 10000,
+                },
+                logs: [createLog("SYSTEM: LANDSCAPE GENERATED.")]
             };
-        case 'SET_MONTE_CARLO':
-            return { ...state, monteCarloResults: action.payload };
-        case 'SET_INPUT':
-            return { ...state, inputState: { ...state.inputState, ...action.payload } };
+        case 'TOGGLE_CALIBRATION': {
+            const isCalOn = !state.mission.isCalibrationMode;
+            return {
+                ...getInitialState(),
+                graphics: state.graphics,
+                ai: state.ai,
+                ui: state.ui,
+                mission: {
+                    ...state.mission,
+                    isCalibrationMode: isCalOn,
+                    driveMode: DRIVE_MODES.MANUAL,
+                    navigationOverlay: false,
+                    simulationState: 'running',
+                    failReason: '',
+                    terrainSeed: isCalOn ? 999 : Math.random() * 10000,
+                },
+                logs: [createLog(isCalOn ? "SYSTEM: CALIBRATION MODE ENGAGED (FLAT PLANE)" : "SYSTEM: CALIBRATION MODE DISENGAGED (LUNAR TERRAIN RESTORED)", isCalOn ? 'warning' : 'info')]
+            };
+        }
+
+        // ── GRAPHICS DOMAIN ──
+        case 'SET_BRIGHTNESS':
+            saveGraphics('pf_brightness', action.payload);
+            return { ...state, graphics: { ...state.graphics, brightness: action.payload } };
+        case 'SET_SHADOW_CONTRAST':
+            saveGraphics('pf_shadow', action.payload);
+            return { ...state, graphics: { ...state.graphics, shadowContrast: action.payload } };
+        case 'TOGGLE_CHROMATIC':
+            saveGraphics('pf_chromatic', !state.graphics.chromaticAberration);
+            return { ...state, graphics: { ...state.graphics, chromaticAberration: !state.graphics.chromaticAberration } };
+        case 'SET_TERRAIN_MODE':
+            saveGraphics('pf_terrain_mode', action.payload);
+            return { ...state, graphics: { ...state.graphics, terrainMode: action.payload } };
+        case 'SET_TERRAIN_RESOLUTION':
+            saveGraphics('pf_terrain_res', action.payload);
+            return { ...state, graphics: { ...state.graphics, terrainResolution: action.payload } };
+        case 'SET_DUST_DENSITY':
+            saveGraphics('pf_dust_density', action.payload);
+            return { ...state, graphics: { ...state.graphics, dustDensity: action.payload } };
+
+        // ── AI DOMAIN ──
         case 'SET_API_KEY':
             localStorage.setItem('pathfinder_api_key', action.payload);
-            return { ...state, apiKey: action.payload };
+            return { ...state, ai: { ...state.ai, apiKey: action.payload } };
         case 'SET_AI_MODEL': {
             let finalModel = action.payload;
-            // Normalize shorthand aliases
             if (finalModel === 'cosmos-reasoning') finalModel = 'nvidia/Cosmos-Reason2-2B';
             const isCosmos = finalModel.toLowerCase().includes('cosmos');
-            const isGemini31 = finalModel.includes('3.1');
             localStorage.setItem('pathfinder_ai_model', finalModel);
             localStorage.setItem('pathfinder_vision_provider', isCosmos ? 'cosmos' : 'gemini');
-            // Human-readable model name for log
             let modelLabel = finalModel;
             if (finalModel === 'gemini-3-flash-preview') modelLabel = 'GEMINI 3 FLASH';
             else if (finalModel === 'gemini-3.1-pro-preview') modelLabel = 'GEMINI 3.1 PRO';
             else if (isCosmos) modelLabel = 'NVIDIA COSMOS';
             return {
                 ...state,
-                aiModel: finalModel,
-                visionProvider: isCosmos ? 'cosmos' : 'gemini',
-                logs: [{
-                    id: Date.now(),
-                    text: `SYSTEM: ENGINE SWITCHED → [${modelLabel.toUpperCase()}]${isGemini31 ? ' ★ NEW MODEL ★' : ''}`,
-                    type: 'info',
-                    timestamp: new Date().toLocaleTimeString()
-                }, ...state.logs].slice(0, 50)
+                ai: { ...state.ai, aiModel: finalModel, visionProvider: isCosmos ? 'cosmos' : 'gemini' },
+                logs: addLog(state, `SYSTEM: ENGINE SWITCHED → [${modelLabel.toUpperCase()}]${finalModel.includes('3.1') ? ' ★ NEW MODEL ★' : ''}`)
             };
         }
         case 'SET_WAYPOINT_COUNT':
-            return { ...state, waypointCount: action.payload };
-        case 'TOGGLE_CALIBRATION':
-            const isCalOn = !state.isCalibrationMode;
-            return {
-                ...getInitialState(),
-                language: state.language,
-                apiKey: state.apiKey,
-                isCalibrationMode: isCalOn,
-                terrainSeed: isCalOn ? 999 : Math.random() * 10000,
-                logs: [{
-                    id: Date.now(),
-                    text: isCalOn ? "SYSTEM: CALIBRATION MODE ENGAGED (FLAT PLANE)" : "SYSTEM: CALIBRATION MODE DISENGAGED (LUNAR TERRAIN RESTORED)",
-                    type: isCalOn ? 'warning' : 'info',
-                    timestamp: new Date().toLocaleTimeString()
-                }]
-            };
-        case 'TOGGLE_TERMINAL':
-            return { ...state, terminalOpen: !state.terminalOpen };
-        case 'TOGGLE_UI':
-            return { ...state, uiVisible: !state.uiVisible };
-        case 'SET_ARRIVAL_ACCURACY':
-            return { ...state, arrivalAccuracy: action.payload };
+            return { ...state, ai: { ...state.ai, waypointCount: action.payload } };
         case 'SET_AI_USE_MC':
             localStorage.setItem('pathfinder_use_mc', action.payload);
-            return { ...state, aiUseMonteCarlo: action.payload };
+            return { ...state, ai: { ...state.ai, aiUseMonteCarlo: action.payload } };
         case 'SET_AI_USE_PATH':
             localStorage.setItem('pathfinder_use_path', action.payload);
-            return { ...state, aiUsePath: action.payload };
-        case 'TOGGLE_HELP':
-            return { ...state, helpOpen: !state.helpOpen };
-        case 'SET_TERRAIN_MODE':
-            return { ...state, terrainMode: action.payload };
+            return { ...state, ai: { ...state.ai, aiUsePath: action.payload } };
         case 'SET_VISION_PROVIDER':
             localStorage.setItem('pathfinder_vision_provider', action.payload);
-            return { ...state, visionProvider: action.payload };
+            return { ...state, ai: { ...state.ai, visionProvider: action.payload } };
         case 'SET_NVIDIA_NIM_URL':
             localStorage.setItem('pathfinder_nvidia_url', action.payload);
-            return { ...state, nvidiaNimUrl: action.payload };
+            return { ...state, ai: { ...state.ai, nvidiaNimUrl: action.payload } };
         case 'SET_NVIDIA_API_KEY':
             localStorage.setItem('pathfinder_nvidia_key', action.payload);
-            return { ...state, nvidiaApiKey: action.payload };
+            return { ...state, ai: { ...state.ai, nvidiaApiKey: action.payload } };
+
+        // ── TELEMETRY ──
+        case 'UPDATE_TELEMETRY':
+            return { ...state, telemetry: { ...state.telemetry, ...action.payload } };
         case 'SET_TARGET_DISTANCE':
-            return { ...state, targetDistance: action.payload };
+            return { ...state, telemetry: { ...state.telemetry, targetDistance: action.payload } };
+
+        // ── RUNTIME ──
+        case 'SET_MONTE_CARLO':
+            return { ...state, monteCarloResults: action.payload };
+        case 'SET_INPUT':
+            return { ...state, inputState: { ...state.inputState, ...action.payload } };
+
         default:
             return state;
     }
