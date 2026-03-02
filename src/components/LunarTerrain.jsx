@@ -88,8 +88,8 @@ export default function LunarTerrain({ terrainData }) {
                 />
             </mesh>
 
-            {/* Liner mesh — dark basalt underside, visible only from below */}
-            <mesh geometry={geometry}>
+            {/* Liner mesh — dark basalt underside, offset down for ground thickness */}
+            <mesh geometry={geometry} position={[0, -0.5, 0]}>
                 <meshBasicMaterial
                     color="#1a1a1a"
                     side={THREE.BackSide}
