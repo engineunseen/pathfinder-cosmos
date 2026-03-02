@@ -1,19 +1,12 @@
-// aiNavigator.js — AI Navigation System for Unseen Pathfinder (v3.3.50)
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// aiNavigator.js — AI Navigation System for Pathfinder (Cosmos Cookoff Edition)
+// Cosmos Reason 2 ONLY — No Gemini, No Heuristics
 import * as THREE from 'three';
-
-const GEMINI_MODEL = "gemini-3-flash-preview";
-const GEMINI_MODEL_PRO = "gemini-3.1-pro-preview";
-
-// Known Gemini model identifiers
-const GEMINI_MODELS = [GEMINI_MODEL, GEMINI_MODEL_PRO, 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'];
-export const isGeminiModel = (model) => model && (model.includes('gemini') || GEMINI_MODELS.includes(model));
 
 export const f1 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(1) : '0.0');
 export const f2 = (v) => (typeof v === 'number' && !isNaN(v) ? v.toFixed(2) : '0.00');
 
 // ============================================================
-// v3.2.0: VISION BRIDGE & FRAME CAPTURE
+// VISION BRIDGE & FRAME CAPTURE
 // ============================================================
 
 /**
@@ -25,7 +18,6 @@ export function captureSimulationFrame(gl, maxDim = 512) {
         if (!gl || !gl.domElement) return null;
         const canvas = gl.domElement;
 
-        // Create offscreen canvas for resizing
         const offscreen = document.createElement('canvas');
         let width = canvas.width;
         let height = canvas.height;
@@ -49,54 +41,24 @@ export function captureSimulationFrame(gl, maxDim = 512) {
     }
 }
 
-/**
- * Universal Vision Provider to hot-swap between Gemini and NVIDIA Cosmos
- */
-export class VisionProvider {
+// ============================================================
+// NVIDIA COSMOS REASON 2 — Vision Provider
+// ============================================================
+
+export class CosmosProvider {
     constructor(config) {
-        this.type = config.type || 'gemini'; // 'gemini' | 'cosmos'
         this.apiKey = config.apiKey;
-        this.url = config.url; // Required for Cosmos
-        this.model = config.model;
+        this.url = config.url;
+        this.model = config.model || 'nvidia/Cosmos-Reason2-2B';
     }
 
     async generateContent(prompt, base64Image) {
-        if (this.type === 'gemini') {
-            return this._callGemini(prompt, base64Image);
-        } else {
-            return this._callCosmos(prompt, base64Image);
-        }
-    }
-
-    async _callGemini(prompt, base64Image) {
-        if (!this.apiKey || this.apiKey.length < 5) throw new Error("GEMINI_KEY_MISSING");
-        const genAI = new GoogleGenerativeAI(this.apiKey);
-        const model = genAI.getGenerativeModel({
-            model: this.model || GEMINI_MODEL,
-            generationConfig: {
-                maxOutputTokens: 1024,
-                temperature: 0.2,
-                responseMimeType: this.targetMimeType || "text/plain"
-            }
-        });
-
-        const content = base64Image
-            ? [prompt, { inlineData: { data: base64Image, mimeType: "image/jpeg" } }]
-            : [prompt];
-
-        const result = await model.generateContent(content);
-        return result.response.text();
-    }
-
-    async _callCosmos(prompt, base64Image) {
         if (!this.url) throw new Error("NVIDIA NIM Endpoint URL not configured.");
 
         const baseUrl = this.url.replace(/\/$/, '').replace(/\/v1$/, '');
         const endpoint = `${baseUrl}/v1/chat/completions`;
 
-        // Determine real target for proxy (if using one)
-        // If the URL is localhost, it's a proxy, and it needs x-target-url to know where to go.
-        // We assume the user put the real NIM URL in the apiKey field if they are using the proxy.
+        // Proxy detection: if URL is localhost, use apiKey as target URL header
         const isProxy = this.url.includes('localhost') || this.url.includes('127.0.0.1');
         const targetUrl = isProxy ? this.apiKey : this.url;
 
@@ -118,7 +80,7 @@ export class VisionProvider {
                 'x-target-url': targetUrl
             },
             body: JSON.stringify({
-                model: this.model || "nvidia/Cosmos-Reason2-2B",
+                model: this.model,
                 messages: messages,
                 max_tokens: 1024,
                 temperature: 0.2,
@@ -148,91 +110,19 @@ export class VisionProvider {
 }
 
 // ============================================================
-// LEVEL 1: STRATEGIC PLANNER (Astro-Core Architecture)
-// ============================================================
-
-export async function planStrategicRoute(apiKey, heightData, startPos, targetPos, terrainSize, waypointCount, model = GEMINI_MODEL, language = 'EN', state = {}) {
-    // PROTECTIVE GUARD: If path-following is disabled, ARCHITECT must NOT run.
-    if (state.aiUsePath === false) {
-        return { waypoints: [], quote: "ARCHITECT: STANDBY.", reasoning: "Manual override: Strategic path following disabled.", isAi: false };
-    }
-
-    if (!apiKey) return { waypoints: [], quote: "FATAL: Navigation SDK Offline.", reasoning: "CRITICAL: Mission Architect cannot initialize.", isAi: false };
-
-    const fullDataUrl = heightmapToImage(heightData);
-    const base64Image = fullDataUrl.split(',')[1];
-    const halfSize = terrainSize / 2;
-
-    const textPrompt = `You are the STRATEGIC ARCHITECT (Route Planning) & SCIENTIFIC SPECIALIST (Astro-Core).
-
-### 1. STRATEGIC ARCHITECT
-Goal: Analyze 257x257 grayscale heightmap and generate a physics-safe trajectory.
-
-MAP SEMANTICS:
-- Grayscale Heightmap of 200m x 200m area.
-- BRIGHTER pixels = Higher Elevation (Craters rims, basaltic ridges).
-- DARKER pixels = Lower Elevation (Cater floors, valleys).
-
-WORLD COORDINATES:
-- Center: [0, 0]. Size: ${terrainSize}m. Bounds: [-${halfSize}, ${halfSize}].
-- START: [${f1(startPos[0])}, ${f1(startPos[2])}]
-- TARGET BEACON: [${f1(targetPos[0])}, ${f1(targetPos[2])}]
-
-MISSION LOGIC:
-1. STRATEGIC ANALYSIS: Conduct a deep technical analysis of regolith density and slope variance. Identify specific topographic hazards (crater rims, basaltic ridges, boulder fields). 
-2. TRAJECTORY LOGIC: Explain path deviations based on traction vs. gradient physics. Use 'No Straight Lines' philosophy.
-3. OUTPUT FORMAT: Strictly valid JSON. Plan exactly ${waypointCount} granular waypoints.
-
-### 2. SCIENTIFIC SPECIALIST (Astronomy)
-Goal: Provide a single, unique, mind-blowing astronomical quote or status alert to inspire the crew.
-- GOAL: Focus on 'cool' and 'mind-blowing' cosmos facts (black holes, pulsar dynamics, galactic chemistry).
-- AVOID: Dry regolith geology, historic clichés, or generic poetry.
-- PERSONALITY: Technically brilliant but engaging. A 'Cool Astronomer' persona.
-
-JSON SCHEMA:
-{
-  "waypoints": [[x, z], ...], 
-  "reasoning": "[Technical report. Detailed topography analysis, physics constraints (gradient variance, regolith density), and pathfinding logic.]",
-  "quote": "[A mission-appropriate scientific quote on astronomy/astrophysics]"
-}
-
-CONSTRAINTS:
-- PERSONALITY: High-level Mission Architect. Technically dense. Aggressive safety margins. Use terms: 'regolith', 'basaltic', 'thermal bloom', 'gradient variance', 'isostatic balance'.
-- FORBIDDEN: Historical clichés, Armstrong, or poetic metaphors.`;
-
-    try {
-        const provider = new VisionProvider({
-            type: state.visionProvider || 'gemini',
-            apiKey: state.visionProvider === 'gemini' ? (apiKey || state.apiKey) : state.nvidiaApiKey,
-            url: state.nvidiaNimUrl,
-            model: model
-        });
-
-        if (provider.type === 'gemini') {
-            provider.targetMimeType = "application/json";
-        }
-
-        const text = await provider.generateContent(textPrompt, base64Image);
-        return parseResponse(text, startPos, targetPos, terrainSize);
-    } catch (err) {
-        return { waypoints: [], quote: `FATAL: AI NAVIGATOR FAILURE [${err.message}]`, reasoning: "Mission Aborted: Critical failure in strategic calculation stack.", isAi: false };
-    }
-}
-
-// ============================================================
-// LEVEL 2: TACTICAL AUTOPILOT (Local Space Transform v0.9.37)
+// TACTICAL AUTOPILOT — Cosmos Reason 2 Decision Loop
 // ============================================================
 
 export async function getAutopilotCommand(apiKey, state, aiModel = 'nvidia/Cosmos-Reason2-2B') {
     const {
-        position, velocity, rotation, targetPos, nextWaypoints,
-        sCVaR, SMaR, fanSummary, currentWaypoint, wheelsOnGround,
-        terrainData, mcSummary, currentPathWaypoints, relBearing, targetDistance
+        position, velocity, rotation, targetPos,
+        fanSummary, wheelsOnGround,
+        terrainData, relBearing, targetDistance
     } = state;
 
     const lidarSweep = getLidarData(position, rotation, terrainData);
 
-    // v3.3.35: Precise boundary vectoring
+    // Precise boundary vectoring
     const bSize = (terrainData?.size / 2) || 100;
     const dists = {
         "+X (RIGHT)": bSize - position[0],
@@ -243,56 +133,42 @@ export async function getAutopilotCommand(apiKey, state, aiModel = 'nvidia/Cosmo
     const closestSide = Object.entries(dists).sort((a, b) => a[1] - b[1])[0];
     const boundaryWarning = closestSide[1] < 15 ? `!!! MAP BOUNDARY ${closestSide[0]} AT ${f1(closestSide[1])}m !!!` : "Clear";
 
-    const sensorOverlay = `
-### SENSOR OVERLAY (INTELLIGENCE):
-- MONTE-CARLO RISK: ${mcSummary || "No Data"}
-- ARCHITECT PATH: ${currentPathWaypoints || "No Data"}
-`;
-
-    const textPrompt = `You are the Tactical Guide (Autopilot). MISSION: Execute the strategic route while navigating complex lunar physics (inertia, low gravity, ballistics).
+    const textPrompt = `You are the Tactical Guide (Autopilot) powered by NVIDIA Cosmos Reason 2. MISSION: Navigate a lunar rover to the destination signal across unknown terrain using physics-aware reasoning.
 
 TELEMETRY CONTEXT:
 - POSITION: [${f2(position[0])}, ${f2(position[2])}] - Current coordinates in meters.
 - VELOCITY: [${f2(velocity[0])}, ${f2(velocity[2])}] - Current speed vector.
-- BEYOND HORIZON (TARGET): [${f1(targetPos[0])}, ${f1(targetPos[1])}] - The final destination.
-- MISSION ROUTE (SPLINE): ${nextWaypoints ? nextWaypoints.map(p => `[${f1(p[0])}, ${f1(p[1])}]`).join(', ') : "None"} - Your mandatory path. You MUST stay within 5m of this line.
+- TARGET DESTINATION: [${f1(targetPos[0])}, ${f1(targetPos[1])}] - The destination signal.
+- TARGET DISTANCE: ${f1(targetDistance)}m
+- RELATIVE BEARING: ${f1(relBearing)}° (negative = target is left, positive = target is right)
+- WHEELS ON GROUND: ${wheelsOnGround}/6
+- MAP BOUNDARY: ${boundaryWarning}
 
-KINETIC METRICS (SENSORY LAYER):
-- sCVaR: Stochastic Conditional Value at Risk. Scale 0 (Safe) to 100 (Wrecked). Probability of a mission-ending event (roll/collision). Current: ${f1(sCVaR)}
-- SMaR: Stability Margin at Risk. Distance in meters to the nearest rollover threshold. HIGH is safe, LOW (<10m) is critical. Current: ${f1(SMaR)}m
-- VENNIK FAN: ${fanSummary ? fanSummary : "No Data"} - Monte Carlo predictive futures. Green lines = Success paths. Red lines = Catastrophic failure.
-- LIDAR TOPO SWEEP: ${lidarSweep}
+SENSOR DATA:
+- MONTE CARLO FUTURES: ${fanSummary ? fanSummary : "No Data"} - Predictive trajectory simulations.
+- LIDAR TERRAIN SWEEP: ${lidarSweep}
 
 OPERATIONAL DIRECTIVE:
 1. PHASE ANALYSIS: 
-   - IF wheelsOnGround < 3: INERTIAL PHASE (Ballistics). Steering is ineffective. Reasoning must focus on mass distribution and roll-compensation.
+   - IF wheelsOnGround < 3: INERTIAL PHASE (Ballistics). Steering is ineffective. Minimize rotation.
    - IF wheelsOnGround >= 3: KINETIC PHASE. Dynamic traction control active.
-2. MISSION PRIORITY: Your primary goal is to reach the target by following the MISSION ROUTE. If you deviate to avoid a hazard, you MUST return to the route as soon as it is safe.
-3. KINETIC BODY AWARENESS: You are a physics entity with 6 wheels. Analyze contact patches and the 'Vennik' fan as your proprietary nervous system.
-4. COGNITIVE REASONING: Adapt to lunar inertia. Reason about your own mass-velocity vector. Avoid oscillations.
-5. METRIC-DRIVEN CONTROL: Prioritize Metrics over speed. If sCVaR > 40, reduce throttle. If SMaR < 10, steer away from the risk vector.
+2. MISSION PRIORITY: Navigate directly toward the destination signal. Use terrain data to avoid hazards.
+3. KINETIC BODY AWARENESS: You are a 150kg physics entity with 6 wheels in lunar gravity (1.62 m/s²).
+4. COGNITIVE REASONING: Adapt to lunar inertia. Reason about your mass-velocity vector. Avoid oscillations.
+5. BOUNDARY AWARENESS: If near map edge, steer toward center.
 
-JSON SCHEMA: {steer, throttle, reasoning}.
-TERMS: 'ballistic arc', 'contact patch', 'inertial drift', 'mass vector', 'torque modulation'.
-
-GOAL: REACH CURRENT WAYPOINT [${f1(currentWaypoint[0])}, ${f1(currentWaypoint[1])}].
+GOAL: REACH DESTINATION at [${f1(targetPos[0])}, ${f1(targetPos[1])}].
 OUTPUT JSON ONLY: { "steer": -1.0 to 1.0, "throttle": 0.0 to 1.0, "reasoning": "..." }`;
 
     try {
-        const provider = new VisionProvider({
-            type: state.visionProvider || 'gemini',
-            apiKey: state.visionProvider === 'gemini' ? apiKey : state.nvidiaApiKey,
+        const provider = new CosmosProvider({
+            apiKey: state.nvidiaApiKey || apiKey,
             url: state.nvidiaNimUrl,
             model: aiModel
         });
 
-        // Setup schema for Gemini
-        if (provider.type === 'gemini') {
-            provider.targetMimeType = "application/json";
-        }
-
-        // Capture frame if in Cosmos mode
-        const base64Frame = state.visionProvider === 'cosmos' ? state.capturedFrame : null;
+        // Capture frame for visual reasoning
+        const base64Frame = state.capturedFrame || null;
 
         const text = await provider.generateContent(textPrompt, base64Frame);
         return parseAutopilotResponse(text);
@@ -311,7 +187,6 @@ function parseAutopilotResponse(text) {
             return validateCmd(JSON.parse(candidate));
         }
     } catch (e) {
-        // V3.3.70: Fallback for truncated JSON from Gemini 3 Flash
         console.warn("Autopilot JSON parse failed. Attempting regex extraction.", e);
         const steerMatch = cleanText.match(/"steer"\s*:\s*([-+]?\d*\.?\d+)/);
         const throttleMatch = cleanText.match(/"throttle"\s*:\s*([-+]?\d*\.?\d+)/);
@@ -338,12 +213,11 @@ function validateCmd(cmd) {
 }
 
 // ============================================================
-// UTILS & IMAGE ENGINE (RESTORED QUALITY)
+// UTILS & IMAGE ENGINE
 // ============================================================
 
 export function getLidarData(position, rotation, terrainData) {
     if (!position || !rotation || !terrainData || !terrainData.heightData) return "OFFLINE";
-    // V3.3.72: Adjusted direction rays to forward 45 degree arcs instead of full 90
     const directions = [0, 45, -45, 90, -90];
     let sweep = "";
     directions.forEach(deg => {
@@ -357,7 +231,6 @@ export function getLidarData(position, rotation, terrainData) {
         if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
             const idx = Math.floor(v * 256) * 257 + Math.floor(u * 256);
             const h = terrainData.heightData[idx];
-            // Format to show relative to current height
             const relH = h - position[1];
             sweep += `[${deg}deg: ${dist}m away, RelH: ${relH > 0 ? '+' : ''}${relH.toFixed(1)}m] `;
         } else {
@@ -384,7 +257,6 @@ export function heightmapToImage(hData) {
     const tempCtx = tempCanvas.getContext('2d');
     const iData = tempCtx.createImageData(side, side);
 
-    // RESTORED NORMALIZATION: Find min/max for full grayscale range
     let minH = Infinity, maxH = -Infinity;
     for (let i = 0; i < data.length; i++) {
         if (data[i] < minH) minH = data[i];
@@ -399,7 +271,6 @@ export function heightmapToImage(hData) {
     }
     tempCtx.putImageData(iData, 0, 0);
 
-    // Smooth scaling to target resolution
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(tempCanvas, 0, 0, side, side, 0, 0, targetSide, targetSide);
@@ -407,38 +278,8 @@ export function heightmapToImage(hData) {
     return hCanvas.toDataURL('image/png');
 }
 
-function parseResponse(text, startPos, targetPos, terrainSize) {
-    try {
-        const match = text.match(/\{[\s\S]*\}/);
-        const parsed = JSON.parse(match[0]);
-        // V0.9.47: HARD COORD VALIDATION (Prevent NaN Black Screen)
-        const validWaypoints = (parsed.waypoints || [])
-            .filter(wp => Array.isArray(wp) && wp.length >= 2 && typeof wp[0] === 'number' && typeof wp[1] === 'number' && !isNaN(wp[0]) && !isNaN(wp[1]))
-            .map(wp => [
-                Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[0])),
-                Math.max(-terrainSize / 2, Math.min(terrainSize / 2, wp[1]))
-            ]);
-
-        if (validWaypoints.length === 0) throw new Error("NO_VALID_COORDINATES");
-
-        return {
-            waypoints: validWaypoints,
-            quote: parsed.quote || "Astro-Core Active.",
-            reasoning: parsed.reasoning || "Route established.",
-            isAi: true
-        };
-    } catch (e) {
-        return {
-            waypoints: [],
-            quote: `Protocol Breach: ${e.message}`,
-            reasoning: "Analysis failed due to coordinate instability.",
-            isAi: false
-        };
-    }
-}
-
 export function summarizeFan(trajectories) {
     if (!trajectories) return "";
     const s = trajectories.reduce((acc, t) => { acc[t.risk]++; return acc; }, { safe: 0, warning: 0, critical: 0 });
-    return `${s.safe}/${trajectories.length} safe trajectories. SCVaR: ${s.critical > 5 ? 'High' : 'Low'}`;
+    return `${s.safe}/${trajectories.length} safe trajectories. Risk: ${s.critical > 5 ? 'High' : 'Low'}`;
 }

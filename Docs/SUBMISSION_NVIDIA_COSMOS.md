@@ -1,40 +1,63 @@
-# UNSEEN PATHFINDER: Autonomous Lunar Risk-Response System
-**Submission for NVIDIA Cosmos Cookoff (January 2026)**
+# Pathfinder — NVIDIA Cosmos Cookoff Submission
 
-## Overview
-**Unseen Pathfinder** is a Physical AI system designed for autonomous lunar exploration. It addresses the critical challenge of navigating high-risk, unknown planetary terrains where high-latency communication renders direct human teleoperation impossible. 
+## Text Description (for submission form)
 
-The system utilizes **NVIDIA Cosmos Reason 2** to bridge the gap between low-level physics (sensor data) and high-level strategic reasoning, enabling a rover to "see, understand, and act" semi-independently in a 1.62 m/s² gravity environment.
+**Pathfinder** is a real-time autonomous lunar rover simulation where NVIDIA Cosmos Reason 2 acts as the vehicle's "Robot Brain." The rover must navigate procedurally generated, hazardous lunar terrain to reach a destination signal — with Cosmos making all driving decisions.
 
-## Key Features
-- **Semantic Terrain Vision**: Processes raw 257x257 grayscale heightmaps using Cosmos Reason 2 to identify and reason about topographical hazards (crater rims, basalt basins, slope gradients).
-- **Real-Time Monte Carlo Risk Engine**: A "Digital Twin" simulation running 500-1000 parallel trajectories to calculate **SMaR** (Stability Margin at Risk) and **sCVaR** (Specific Conditional Value at Risk).
-- **Dual-Layer Reasoning Architecture**:
-    - *Strategic Layer (Architect)*: Long-term trajectory planning using Vision-Reasoning.
-    - *Tactical Layer (Pilot)*: High-frequency local control using LIDAR/Cosmos integration to manage rover inertia and slip.
-- **High-Fidelity Physics Playground**: Custom-built lunar 3D engine with dynamic regolith displacement (dust fountains inspired by Apollo 16 footage) and realistic surface dynamics.
+Unlike traditional PID-based autonomous systems, Pathfinder feeds Cosmos Reason 2 rich multimodal context: a captured viewport frame for visual situational awareness, 12-sector LIDAR topographical scans for precise hazard detection, Monte Carlo trajectory predictions showing risk distribution across 60+ simulated paths, and rover telemetry (speed, bearing, tilt, wheel traction). The AI then reasons about the physical environment — identifying slopes, craters, and ridgelines — and outputs real-time steering/throttle commands with explicit reasoning explanations.
 
-## Technical Implementation with Cosmos Reason 2
-Unseen Pathfinder implements Cosmos Reason 2 in two primary workflows:
+The system compensates for AI inference latency (~1-3 seconds) through predictive state estimation, projecting the rover's future position and bearing to prevent oscillation. When Cosmos is unavailable, the rover safely stops rather than attempting blind navigation — demonstrating the principle that reasoning-based autonomy is fundamentally different from reactive control.
 
-1. **Strategic VLM Analysis**: 
-   The system renders the lunar height data into an egocentric visual map. Cosmos Reason 2 analyzes this map not as a grid of numbers, but as a physical landscape. It explains *why* a specific path is chosen (e.g., "avoiding the basaltic slope to maintain traction"), demonstrating advanced spatial and social-physical reasoning.
+Built with React Three Fiber and Cannon.js physics, the simulation features realistic lunar gravity (1.62 m/s²), 6-wheel independent suspension, dynamic regolith dust effects, and multiple procedural terrain generation modes.
 
-2. **Autonomous Robot Brain (Decision Making)**:
-   In Autopilot mode, the rover feeds LIDAR data and Monte Carlo safety metrics into the Cosmos reasoning loop. The model acts as the "Captain," making nuanced decisions on throttle and steering. It doesn't just calculate a PID loop; it calculates *intent*, such as "reducing speed to prevent rollover ahead of a detected gradient spike."
+## Demo Video Script (< 3 min)
 
-## Impact
-This project moves the Physical AI field forward by proving that **Reasoning-based Autonomy** can significantly reduce mission failure rates in extreme environments. By combining probabilistic physics (Monte Carlo) with deterministic reasoning (Cosmos), we create a "Physical Plausibility Prediction" system that ensures autonomous robots are not just efficient, but physically safe.
+### 0:00 – 0:15 — Hook
+*"What if a lunar rover could think about why a path is dangerous, not just detect that it is?"*
+Show cinematic wide shot of rover on lunar terrain with Earth in the background.
 
-## Deployment Instructions
-1. **Clone the Repository**: `git clone https://github.com/engineunseen/pathfinder`
-2. **Setup Environment**:
-   - Install dependencies: `npm install`
-   - Create a `.env` file or use the Settings HUD to provide your NVIDIA API Key (Cosmos SDK).
-3. **Run Localization**: `npm run dev`
-4. **Access UI**: Open `localhost:5173`. Use the HUD to generate new lunar seeds and engage the **AI ARCHITECT** and **AUTOPILOT**.
+### 0:15 – 0:45 — The Problem
+- Lunar terrain is unpredictable: craters, slopes, ridgelines
+- Communication latency makes teleoperation impossible
+- Traditional autopilot uses PID — it reacts, it doesn't reason
+
+### 0:45 – 1:30 — Cosmos In Action
+- Switch to Autopilot mode (press M)
+- Show the AI reasoning log in the terminal: Cosmos explaining WHY it turns
+- Show LIDAR panel lighting up with terrain scan
+- Show Monte Carlo fan visualizing safe (green) vs dangerous (red) trajectories
+- Show the AI Vision Feed overlay (captured frame sent to Cosmos)
+
+### 1:30 – 2:15 — Technical Integration
+- Brief overlay showing the architecture: Browser → Telemetry/LIDAR/Frame → NIM API → Cosmos Reason 2 → Steering/Throttle
+- Show Settings panel with NIM endpoint configuration
+- Mention latency compensation: "The AI predicts where the rover WILL BE when it responds"
+
+### 2:15 – 2:45 — Arrival
+- Show rover approaching the destination signal
+- Mission Success screen
+- Quick terrain regeneration + new run to show variety
+
+### 2:45 – 3:00 — Closing
+*"Pathfinder: Reasoning-based autonomy for the final frontier."*
+Show GitHub URL on screen.
+
+## Submission Checklist
+- [ ] Text description (above, paste into form)
+- [ ] Demo video (< 3 min, upload to YouTube or similar)
+- [ ] Public GitHub repo URL: `https://github.com/engineunseen/pathfinder`
+- [ ] README.md in repo root with setup instructions
+- [ ] Cosmos Reason 2 demonstrably integrated into core decision-making loop ✅
+
+## Judging Criteria Self-Assessment
+| Criterion | Evidence |
+|-----------|---------|
+| **Cosmos Reason 2 Integration** | Core autopilot loop — ALL driving commands generated by Cosmos |
+| **Innovation** | Multimodal context (visual + LIDAR + Monte Carlo + telemetry), latency-compensated predictive bearing |
+| **Technical Quality** | Real-time 3D physics, multithreaded Monte Carlo, procedural terrain |
+| **Project Design** | Clean sci-fi HUD, NASA-inspired aesthetics, cinematic rendering |
+| **Documentation** | Comprehensive README, server setup guide, submission doc |
 
 ---
-**Lead Developer:** Andrew Turtsevych  
-**Community:** Unseen Engine / Engine Unseen  
-**Vision:** Bringing reasoning to the final frontier.
+**Deadline:** March 5, 2026 — 5:00 PM PT  
+**Developer:** Andrew Turtsevych

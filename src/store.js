@@ -1,9 +1,9 @@
 // store.js — Structured state manager with domain separation
-// v4.0.0: Architecture refactoring — domain-grouped state
+// Cosmos Cookoff Edition — NVIDIA Cosmos Reason 2 only
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v4.0.0";
+export const VERSION = "v4C.1.0";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -49,20 +49,16 @@ export const getInitialState = () => ({
         shadowContrast: parseFloat(localStorage.getItem('pf_shadow')) || 0.5,
         chromaticAberration: localStorage.getItem('pf_chromatic') === 'true',
         terrainMode: localStorage.getItem('pf_terrain_mode') || 'legacy',
-        terrainResolution: parseInt(localStorage.getItem('pf_terrain_res')) || TERRAIN_RESOLUTIONS.MEDIUM,
+        terrainResolution: TERRAIN_RESOLUTIONS.MEDIUM, // Fixed — resolution picker disabled in Cosmos edition
         dustDensity: parseInt(localStorage.getItem('pf_dust_density')) || DUST_DENSITIES.MEDIUM,
     },
 
-    // ── AI DOMAIN ──
+    // ── AI DOMAIN (Cosmos Only — model HARDCODED for hackathon) ──
     ai: {
-        apiKey: localStorage.getItem('pathfinder_api_key') || '',
-        aiModel: localStorage.getItem('pathfinder_ai_model') || 'gemini-3-flash-preview',
-        visionProvider: localStorage.getItem('pathfinder_vision_provider') || 'gemini',
-        nvidiaNimUrl: localStorage.getItem('pathfinder_nvidia_url') || '',
+        aiModel: 'nvidia/Cosmos-Reason2-2B', // LOCKED — Cosmos Cookoff requirement
+        visionProvider: 'cosmos',
+        nvidiaNimUrl: localStorage.getItem('pathfinder_nvidia_url') || 'http://localhost:8001/v1',
         nvidiaApiKey: localStorage.getItem('pathfinder_nvidia_key') || '',
-        aiUseMonteCarlo: localStorage.getItem('pathfinder_use_mc') !== 'false',
-        aiUsePath: localStorage.getItem('pathfinder_use_path') === 'true',
-        waypointCount: 7,
     },
 
     // ── MISSION DOMAIN ──
@@ -70,7 +66,6 @@ export const getInitialState = () => ({
         driveMode: DRIVE_MODES.MANUAL,
         simulationState: 'running',
         failReason: '',
-        navigationOverlay: false,
         terrainSeed: Math.random() * 10000,
         isCalibrationMode: false,
         arrivalAccuracy: 5.0,
@@ -151,12 +146,7 @@ function simulationReducer(state, action) {
                 mission: { ...state.mission, driveMode: action.payload },
                 logs: addLog(state, action.payload === DRIVE_MODES.AUTOPILOT ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED", action.payload === DRIVE_MODES.AUTOPILOT ? 'warning' : 'info')
             };
-        case 'TOGGLE_NAV_OVERLAY':
-            return {
-                ...state,
-                mission: { ...state.mission, navigationOverlay: !state.mission.navigationOverlay },
-                logs: addLog(state, !state.mission.navigationOverlay ? "SYSTEM: MONTE CARLO OVERLAY ACTIVATED" : "SYSTEM: MONTE CARLO OVERLAY DEACTIVATED")
-            };
+        // TOGGLE_NAV_OVERLAY removed — Cosmos Cookoff edition
         case 'SET_SIMULATION_STATE': {
             const targetState = action.payload.state || action.payload;
             const targetReason = action.payload.reason || '';
@@ -182,7 +172,6 @@ function simulationReducer(state, action) {
                 mission: {
                     ...state.mission,
                     driveMode: DRIVE_MODES.MANUAL,
-                    navigationOverlay: false,
                     simulationState: 'running',
                     failReason: '',
                 },
@@ -197,7 +186,6 @@ function simulationReducer(state, action) {
                 mission: {
                     ...state.mission,
                     driveMode: DRIVE_MODES.MANUAL,
-                    navigationOverlay: false,
                     simulationState: 'running',
                     failReason: '',
                     terrainSeed: Math.random() * 10000,
@@ -215,7 +203,6 @@ function simulationReducer(state, action) {
                     ...state.mission,
                     isCalibrationMode: isCalOn,
                     driveMode: DRIVE_MODES.MANUAL,
-                    navigationOverlay: false,
                     simulationState: 'running',
                     failReason: '',
                     terrainSeed: isCalOn ? 999 : Math.random() * 10000,
@@ -244,37 +231,16 @@ function simulationReducer(state, action) {
             saveGraphics('pf_dust_density', action.payload);
             return { ...state, graphics: { ...state.graphics, dustDensity: action.payload } };
 
-        // ── AI DOMAIN ──
-        case 'SET_API_KEY':
-            localStorage.setItem('pathfinder_api_key', action.payload);
-            return { ...state, ai: { ...state.ai, apiKey: action.payload } };
+        // ── AI DOMAIN (Cosmos Only) ──
         case 'SET_AI_MODEL': {
-            let finalModel = action.payload;
-            if (finalModel === 'cosmos-reasoning') finalModel = 'nvidia/Cosmos-Reason2-2B';
-            const isCosmos = finalModel.toLowerCase().includes('cosmos');
+            const finalModel = action.payload;
             localStorage.setItem('pathfinder_ai_model', finalModel);
-            localStorage.setItem('pathfinder_vision_provider', isCosmos ? 'cosmos' : 'gemini');
-            let modelLabel = finalModel;
-            if (finalModel === 'gemini-3-flash-preview') modelLabel = 'GEMINI 3 FLASH';
-            else if (finalModel === 'gemini-3.1-pro-preview') modelLabel = 'GEMINI 3.1 PRO';
-            else if (isCosmos) modelLabel = 'NVIDIA COSMOS';
             return {
                 ...state,
-                ai: { ...state.ai, aiModel: finalModel, visionProvider: isCosmos ? 'cosmos' : 'gemini' },
-                logs: addLog(state, `SYSTEM: ENGINE SWITCHED → [${modelLabel.toUpperCase()}]${finalModel.includes('3.1') ? ' ★ NEW MODEL ★' : ''}`)
+                ai: { ...state.ai, aiModel: finalModel },
+                logs: addLog(state, `SYSTEM: MODEL → [${finalModel.toUpperCase()}]`)
             };
         }
-        case 'SET_WAYPOINT_COUNT':
-            return { ...state, ai: { ...state.ai, waypointCount: action.payload } };
-        case 'SET_AI_USE_MC':
-            localStorage.setItem('pathfinder_use_mc', action.payload);
-            return { ...state, ai: { ...state.ai, aiUseMonteCarlo: action.payload } };
-        case 'SET_AI_USE_PATH':
-            localStorage.setItem('pathfinder_use_path', action.payload);
-            return { ...state, ai: { ...state.ai, aiUsePath: action.payload } };
-        case 'SET_VISION_PROVIDER':
-            localStorage.setItem('pathfinder_vision_provider', action.payload);
-            return { ...state, ai: { ...state.ai, visionProvider: action.payload } };
         case 'SET_NVIDIA_NIM_URL':
             localStorage.setItem('pathfinder_nvidia_url', action.payload);
             return { ...state, ai: { ...state.ai, nvidiaNimUrl: action.payload } };
@@ -293,6 +259,22 @@ function simulationReducer(state, action) {
             return { ...state, monteCarloResults: action.payload };
         case 'SET_INPUT':
             return { ...state, inputState: { ...state.inputState, ...action.payload } };
+
+        case 'RESET_DEFAULTS':
+            // Wipe all persisted settings
+            localStorage.removeItem('pf_brightness');
+            localStorage.removeItem('pf_shadow');
+            localStorage.removeItem('pf_chromatic');
+            localStorage.removeItem('pf_terrain_mode');
+            localStorage.removeItem('pf_dust_density');
+            localStorage.removeItem('pathfinder_ai_model');
+            localStorage.removeItem('pathfinder_nvidia_url');
+            localStorage.removeItem('pathfinder_nvidia_key');
+
+            return {
+                ...getInitialState(),
+                logs: [createLog("SYSTEM: ALL PARAMETERS RESET TO FACTORY DEFAULTS", 'warning')]
+            };
 
         default:
             return state;

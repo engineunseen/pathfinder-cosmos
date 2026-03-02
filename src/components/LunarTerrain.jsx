@@ -78,13 +78,21 @@ export default function LunarTerrain({ terrainData }) {
             {/* Physics body — invisible */}
             <mesh ref={heightfieldRef} visible={false} />
 
-            {/* Visual mesh */}
+            {/* Visual mesh — top surface */}
             <mesh geometry={geometry} receiveShadow castShadow>
                 <meshStandardMaterial
                     vertexColors
                     roughness={0.95}
                     metalness={0.0}
                     flatShading={false}
+                />
+            </mesh>
+
+            {/* Liner mesh — dark basalt underside, visible only from below */}
+            <mesh geometry={geometry}>
+                <meshBasicMaterial
+                    color="#1a1a1a"
+                    side={THREE.BackSide}
                 />
             </mesh>
         </group>

@@ -103,9 +103,7 @@ function runSimulation(state, isAutopilot) {
     const dt = PREDICTION_HORIZON / PREDICTION_STEPS;
     const rng = seededRandom(Date.now());
 
-    // Metrics collection
-    const severityScores = []; // For sCVaR
-    const margins = [];        // For SMaR
+    // Trajectory collection (metrics removed — Cosmos Cookoff edition)
 
     for (let sample = 0; sample < MONTE_CARLO_SAMPLES; sample++) {
         let simSteer, simThrottle;
@@ -230,30 +228,11 @@ function runSimulation(state, isAutopilot) {
             // Pure fan-based fitness: prefer green paths that get closer to target
             fitness: (risk === 'safe' ? 2000 : risk === 'warning' ? 500 : -10000) - finalDist
         });
-
-        severityScores.push(maxTilt); // Simplified severity for now
-        margins.push(minSafetyMargin);
     }
 
-    // --- Calculate sCVaR and SMaR ---
-    // sCVaR_alpha (alpha = 0.95): Average of worst 5% severities
-    severityScores.sort((a, b) => b - a); // Descending
-    const cutoffIndex = Math.ceil(severityScores.length * 0.05);
-    let sCVaRSum = 0;
-    for (let i = 0; i < cutoffIndex; i++) sCVaRSum += severityScores[i];
-    const sCVaR = (cutoffIndex > 0) ? (sCVaRSum / cutoffIndex) : 0;
-
-    // SMaR_alpha (alpha = 0.95): 5th percentile safety margin
-    margins.sort((a, b) => a - b); // Ascending
-    const smarIndex = Math.floor(margins.length * 0.05);
-    const SMaR = margins[smarIndex] || 0;
-
-    // Return extended results
+    // Return trajectories (visual fan only, no proprietary metrics)
     return {
         trajectories,
-        metrics: {
-            sCVaR: sCVaR.toFixed(1),
-            SMaR: SMaR.toFixed(1)
-        }
+        metrics: {}
     };
 }

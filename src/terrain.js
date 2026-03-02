@@ -115,14 +115,14 @@ export function getSlopeAtPosition(heightData, worldX, worldZ, segments = DEFAUL
 // mode: 'legacy' | 'naturalist' | 'ethereal'
 // resolution: number of terrain segments (128, 256, 512)
 export function generateTerrainData(seed, mode = 'legacy', resolution = DEFAULT_SEGMENTS) {
-    const isCalibration = seed === 999;
-    const segments = resolution;
+    const isCalibration = Math.floor(seed) === 999;
+    const segments = (isCalibration && !resolution) ? 128 : (resolution || DEFAULT_SEGMENTS);
 
     const rng = mulberry32(Math.floor(isCalibration ? 1234 : seed));
     const noise2D = createNoise2D(() => rng());
 
     const craters = isCalibration ? [] : generateCraters(rng, 15, mode);
-    const rocks = (isCalibration || mode !== 'legacy') ? [] : generateRocks(rng);
+    const rocks = []; // PERMANENTLY REMOVED FOR COOKOFF EDITION
     const heightData = new Float32Array((segments + 1) * (segments + 1));
 
     // Build heightmap

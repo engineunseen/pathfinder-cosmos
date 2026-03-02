@@ -22,4 +22,17 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Internal tooling
 .gitnexus
+.claude
+_extracted_v335
+
+# Agent instruction files (internal)
+GITNEXUS_AI_INSTRUCTIONS.md
+NEW_AGENT_INSTRUCTION.json
+LUNAR_CORE_GENESIS.json
+RESTORATION_GUIDE_RU.md
+AGENTS.md
+CLAUDE.md
+Docs/Old/

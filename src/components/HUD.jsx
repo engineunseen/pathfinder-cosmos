@@ -1,8 +1,8 @@
-// components/HUD.jsx — Sci-Fi HUD overlay (NVIDIA Drive / SpaceX Dragon style)
-// v4.0.0: Context-based state, fixed metrics, logo pairs, terrain resolution
+// components/HUD.jsx — Sci-Fi HUD overlay (Cosmos Cookoff Edition)
+// Stripped: Vision by UNSEEN ENGINE, sCVaR/SMaR, overlay button, Gemini options
 import React, { useState, useCallback, useRef, memo, useEffect } from 'react';
 import { STRINGS } from '../i18n';
-import { COLORS as C, WARNING_ANGLE, VERSION, TERRAIN_RESOLUTIONS, DUST_DENSITIES, DRIVE_MODES, useSimulationState, useSimulationDispatch } from '../store';
+import { COLORS as C, WARNING_ANGLE, VERSION, DUST_DENSITIES, DRIVE_MODES, useSimulationState, useSimulationDispatch } from '../store';
 import TerminalPanel from './TerminalPanel';
 
 // Corner bracket decorator component
@@ -27,17 +27,13 @@ function BatteryBar({ value }) {
     );
 }
 
-// Telemetry panel (Top Left) — v4.0.0: Fixed sCVaR scale (0–100, not 0–1)
-function TelemetryPanel({ telemetry, lang, navigationOverlay, style, onToggleHelp, sCVaR }) {
+// Telemetry panel (Top Left) — Cosmos Cookoff: No sCVaR
+function TelemetryPanel({ telemetry, lang, style, onToggleHelp }) {
     const t = STRINGS[lang];
     const pitchVal = parseFloat(telemetry.pitch) || 0;
     const rollVal = parseFloat(telemetry.roll) || 0;
     const pitchColor = Math.abs(pitchVal) > WARNING_ANGLE ? C.CRITICAL_PATH : C.PRIMARY_INFO;
     const rollColor = Math.abs(rollVal) > WARNING_ANGLE ? C.CRITICAL_PATH : C.PRIMARY_INFO;
-
-    // v4.0.0: sCVaR is 0–100 scale. >60 = critical, >30 = warning
-    const sCVaRVal = parseFloat(sCVaR) || 0;
-    const sCVaRColor = sCVaRVal > 60 ? C.CRITICAL_PATH : sCVaRVal > 30 ? C.WARNING_PATH : C.SAFE_PATH;
 
     return (
         <CornerBrackets className="panel-telemetry" style={style}>
@@ -77,24 +73,13 @@ function TelemetryPanel({ telemetry, lang, navigationOverlay, style, onToggleHel
                 <span className="label">{t.battery}:</span>
                 <BatteryBar value={telemetry.battery || 100} />
             </div>
-            {navigationOverlay && sCVaR !== undefined && (
-                <div className="telemetry-row" style={{ marginTop: '5px', borderTop: '1px solid rgba(0, 255, 255, 0.2)', paddingTop: '5px' }}>
-                    <span className="label">sCVaR_α:</span>
-                    <span className="value" style={{ color: sCVaRColor }}>
-                        {sCVaRVal.toFixed(1)}
-                    </span>
-                </div>
-            )}
         </CornerBrackets>
     );
 }
 
-// Mission Panel (Top Right) — v4.0.0: Fixed SMaR scale (meters, not 0–1)
-function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, SMaR, navigationOverlay, style }) {
+// Mission Panel (Top Right) — Cosmos Cookoff: No SMaR
+function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenSettings, style }) {
     const t = STRINGS[lang];
-    // v4.0.0: SMaR is in meters. <15 = critical, <35 = warning, >35 = safe
-    const sMarVal = parseFloat(SMaR) || 0;
-    const sMarColor = sMarVal < 15 ? C.CRITICAL_PATH : sMarVal < 35 ? C.WARNING_PATH : C.SAFE_PATH;
 
     return (
         <CornerBrackets className="panel-mission" style={style}>
@@ -117,12 +102,6 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
                 <span className="label">{t.time}:</span>
                 <span className="value">{Math.floor(elapsedTime || 0)}s</span>
             </div>
-            {navigationOverlay && SMaR !== undefined && (
-                <div className="telemetry-row" style={{ marginTop: '5px', borderTop: '1px solid rgba(0, 255, 255, 0.1)', paddingTop: '5px' }}>
-                    <span className="label">SMaR_α:</span>
-                    <span className="value" style={{ color: sMarColor }}>{sMarVal.toFixed(1)}m</span>
-                </div>
-            )}
             <button
                 className="hud-button"
                 style={{ width: '100%', marginTop: '15px' }}
@@ -136,19 +115,16 @@ function MissionPanel({ targetDistance, lang, elapsedTime, onNewTerrain, onOpenS
     );
 }
 
-// Bottom Control Panel — v4.0.0: reads from context, shows specific model name
-function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, failReason, navigationOverlay, onToggleNav, onPlanRoute, isAiOnline, isAiPlanning, isMcCalculating, aiQuote }) {
+// Bottom Control Panel — Cosmos Cookoff: No overlay button, Cosmos engine only
+function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, isAiOnline, isAiPlanning }) {
     const state = useSimulationState();
     const terminalOpen = state.ui.terminalOpen;
     const t = STRINGS[lang];
 
-    // v4.0.0: Show specific model name
+    // Cosmos only — show engine name
     const getActiveEngineName = () => {
-        if (!isAiOnline) return 'Vision by UNSEEN ENGINE';
-        const model = state.ai.aiModel;
-        if (model.includes('cosmos') || model.includes('Cosmos')) return 'NVIDIA COSMOS';
-        if (model.includes('3.1')) return 'GEMINI 3.1 PRO';
-        return 'GEMINI 3 FLASH';
+        if (!isAiOnline) return 'OFFLINE';
+        return 'NVIDIA COSMOS REASON 2';
     };
 
     return (
@@ -168,18 +144,18 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, failRe
 
             <div className="ai-status" style={{ marginBottom: '12px', minHeight: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.4)', letterSpacing: '2px', marginBottom: '2px' }}>ACTIVE ENGINE:</div>
-                <div style={{ fontSize: '12px', fontWeight: 'bold', color: isAiOnline ? '#00FFFF' : '#FFBF00', letterSpacing: '1px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', color: isAiOnline ? '#76b900' : '#FFBF00', letterSpacing: '1px' }}>
                     {getActiveEngineName()}
                 </div>
                 {isAiPlanning ? (
-                    <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px', marginTop: '4px' }}>{t.planning}</span>
-                ) : (navigationOverlay || driveMode === 'autopilot') ? (
+                    <span className="ai-active-text pulse" style={{ color: '#76b900', fontSize: '11px', marginTop: '4px' }}>{t.planning}</span>
+                ) : driveMode === 'autopilot' ? (
                     isAiOnline ? (
-                        <span className="ai-active-text pulse" style={{ color: '#00FFFF', fontSize: '11px', marginTop: '4px' }}>{t.recalculating}</span>
+                        <span className="ai-active-text pulse" style={{ color: '#76b900', fontSize: '11px', marginTop: '4px' }}>{t.recalculating}</span>
                     ) : (
-                        <span className="ai-active-text pulse" style={{ color: '#FFBF00', fontSize: '11px', marginTop: '4px' }}>VISION ENGINE ACTIVE</span>
+                        <span className="ai-active-text" style={{ color: '#FFBF00', fontSize: '11px', marginTop: '4px' }}>CONFIGURE NIM ENDPOINT IN SETTINGS</span>
                     )
-                ) : !navigationOverlay && driveMode === 'manual' ? (
+                ) : driveMode === 'manual' ? (
                     <span className="ai-prompt" style={{ fontSize: '11px', marginTop: '4px' }}>{t.navigatePrompt}</span>
                 ) : null}
             </div>
@@ -188,31 +164,14 @@ function ControlPanel({ driveMode, lang, onSetDriveMode, simulationState, failRe
                 <button
                     className={`mode-btn ${driveMode === 'autopilot' ? 'active-autopilot pulse' : ''}`}
                     onClick={() => onSetDriveMode(driveMode === 'autopilot' ? 'manual' : 'autopilot')}
-                    style={{ flex: 0.618 }}
+                    style={{ flex: 1 }}
                     disabled={simulationState !== 'running'}
                 >
                     <div className="inner-frame" />
                     <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>{t.driveMode}</span>
                     {driveMode === 'autopilot' ? t.autopilot : t.manual}
                 </button>
-
-                <button
-                    className={`mode-btn ${navigationOverlay ? 'active-overlay' : ''}`}
-                    onClick={() => onToggleNav()}
-                    style={{ flex: 0.382, pointerEvents: 'auto' }}
-                    disabled={simulationState !== 'running'}
-                >
-                    <div className="inner-frame" />
-                    <span style={{ fontSize: '10px', opacity: 0.7, display: 'block' }}>OVERLAY</span>
-                    {t.sensorData}
-                </button>
             </div>
-
-            {aiQuote && (
-                <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(0, 255, 255, 0.05)', borderLeft: '2px solid #00FFFF', fontFamily: 'monospace', fontSize: '11px', color: '#00FFFF', fontStyle: 'italic', lineHeight: '1.4' }}>
-                    {`"${aiQuote}"`}
-                </div>
-            )}
 
             <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0, 255, 255, 0.15)', paddingTop: '8px' }}>
                 <ControlsHint lang={lang} />
@@ -308,17 +267,21 @@ function LidarPanel({ data, lang }) {
     );
 }
 
-// Settings Modal — v4.0.0: Context-based, calibration doesn't close menu, terrain resolution + dust density
+// Settings Modal — Cosmos Cookoff Edition: Cosmos-only, no Gemini, no Architect options
 function SettingsModal({ isOpen, onClose, onToggleCalibration }) {
     const state = useSimulationState();
     const dispatch = useSimulationDispatch();
+    const [confirmReset, setConfirmReset] = React.useState(false);
+    const [localBrightness, setLocalBrightness] = React.useState(1.2);
+
+    const { graphics, ai, mission, ui } = state || {};
+
+    React.useEffect(() => { setLocalBrightness(graphics?.brightness || 1.2); }, [graphics?.brightness]);
+
     if (!isOpen) return null;
 
-    const { graphics, ai, mission, ui } = state;
     const lang = ui.language;
     const t = STRINGS[lang];
-    const [localBrightness, setLocalBrightness] = React.useState(graphics.brightness || 1.2);
-    React.useEffect(() => { setLocalBrightness(graphics.brightness || 1.2); }, [graphics.brightness]);
 
     const handleSliderChange = (e) => {
         const val = parseFloat(e.target.value);
@@ -333,14 +296,47 @@ function SettingsModal({ isOpen, onClose, onToggleCalibration }) {
         if (graphics.chromaticAberration) dispatch({ type: 'TOGGLE_CHROMATIC' });
     };
 
-    const isCosmos = ai.aiModel?.includes('cosmos') || ai.aiModel?.includes('Cosmos');
-
     return (
         <div className="modal-overlay" onClick={onClose}>
             <CornerBrackets className="settings-panel" onClick={e => e.stopPropagation()}>
                 <h2 className="panel-title">{t.settings}</h2>
                 <div style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: '12px' }}>
-                    {/* CALIBRATION — v4.0.0: Does NOT close menu */}
+                    {/* NVIDIA COSMOS NIM CONFIGURATION — TOP PRIORITY */}
+                    <div className="settings-row" style={{ display: 'block' }}>
+                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px', color: '#76b900' }}>⚡ NVIDIA COSMOS REASON 2:</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(118, 185, 0, 0.05)', border: '1px solid rgba(118, 185, 0, 0.3)' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '9px', color: 'rgba(118, 185, 0, 0.8)' }}>AI MODEL (LOCKED):</span>
+                                <div style={{ background: 'rgba(118, 185, 0, 0.1)', width: '100%', border: '1px solid rgba(118, 185, 0, 0.6)', color: '#76b900', padding: '6px', fontSize: '11px', fontFamily: 'monospace', letterSpacing: '0.5px' }}>🔒 {ai.aiModel}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '9px', color: 'rgba(118, 185, 0, 0.8)' }}>NIM ENDPOINT URL:</span>
+                                <input className="api-input" value={ai.nvidiaNimUrl} onChange={(e) => dispatch({ type: 'SET_NVIDIA_NIM_URL', payload: e.target.value })} placeholder="http://localhost:8001/v1" style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(118, 185, 0, 0.4)', color: '#76b900', padding: '6px', fontSize: '11px', fontFamily: 'monospace' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '9px', color: 'rgba(118, 185, 0, 0.8)' }}>API KEY / SECRET TOKEN:</span>
+                                <input className="api-input" type="password" value={ai.nvidiaApiKey} onChange={(e) => dispatch({ type: 'SET_NVIDIA_API_KEY', payload: e.target.value })} placeholder="https://8000-xxxx.brevlab.com or nv-nim-..." style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(118, 185, 0, 0.4)', color: '#76b900', padding: '6px', fontSize: '11px', fontFamily: 'monospace' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
+                            </div>
+                            <div style={{ fontSize: '9px', color: 'rgba(118, 185, 0, 0.5)', lineHeight: '1.4' }}>
+                                Default: proxy at localhost:8001/v1 → Brev.dev L40S server.<br />
+                                Run <code style={{ color: '#76b900' }}>node proxy.js</code> locally + <code style={{ color: '#76b900' }}>bash Docs/setup_cosmos.sh</code> on GPU server.
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ARRIVAL ACCURACY */}
+                    <div className="settings-row" style={{ display: 'block' }}>
+                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.accuracy}:</span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            {[15.0, 5.0, 1.5].map(acc => (
+                                <button key={acc} className={`hud-button ${mission.arrivalAccuracy === acc ? 'active' : ''}`} style={{ flex: 1, margin: 0, fontSize: '10px' }} onClick={() => dispatch({ type: 'SET_ARRIVAL_ACCURACY', payload: acc })}>
+                                    {acc === 15.0 ? t.easy : acc === 5.0 ? t.normal : t.hard} ({acc}m)
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* CALIBRATION */}
                     <div className="settings-row" style={{ display: 'block' }}>
                         <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>CALIBRATION:</span>
                         <button
@@ -371,20 +367,7 @@ function SettingsModal({ isOpen, onClose, onToggleCalibration }) {
                         </div>
                     </div>
 
-                    {/* v4.0.0: TERRAIN RESOLUTION */}
-                    <div className="settings-row" style={{ display: 'block' }}>
-                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>TERRAIN RESOLUTION:</span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            {[[TERRAIN_RESOLUTIONS.LOW, 'LOW (128)'], [TERRAIN_RESOLUTIONS.MEDIUM, 'MEDIUM (256)'], [TERRAIN_RESOLUTIONS.HIGH, 'HIGH (512)']].map(([val, label]) => (
-                                <button key={val} className={`hud-button ${graphics.terrainResolution === val ? 'active' : ''}`} style={{ flex: 1, margin: 0, fontSize: '9px' }} onClick={() => dispatch({ type: 'SET_TERRAIN_RESOLUTION', payload: val })}>{label}</button>
-                            ))}
-                        </div>
-                        <div style={{ fontSize: '9px', color: 'rgba(0,255,255,0.4)', marginTop: '4px' }}>
-                            Higher resolution = sharper terrain detail (may impact performance)
-                        </div>
-                    </div>
-
-                    {/* v4.0.0: DUST DENSITY */}
+                    {/* DUST DENSITY */}
                     <div className="settings-row" style={{ display: 'block' }}>
                         <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>DUST PARTICLES:</span>
                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -418,201 +401,49 @@ function SettingsModal({ isOpen, onClose, onToggleCalibration }) {
                         <button className="hud-button" style={{ margin: 0, borderColor: graphics.chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.2)', color: graphics.chromaticAberration ? '#00FF41' : 'rgba(255, 255, 255, 0.5)', minWidth: '60px' }} onClick={() => dispatch({ type: 'TOGGLE_CHROMATIC' })}>{graphics.chromaticAberration ? 'ON' : 'OFF'}</button>
                     </div>
 
-                    {/* WAYPOINT RESOLUTION */}
-                    <div className="settings-row" style={{ display: 'block' }}>
-                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.waypointResolution}:</span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            {[7, 15, 25].map(cnt => (
-                                <button key={cnt} className={`hud-button ${ai.waypointCount === cnt ? 'active' : ''}`} style={{ flex: 1, margin: 0, fontSize: '10px' }} onClick={() => dispatch({ type: 'SET_WAYPOINT_COUNT', payload: cnt })}>
-                                    {cnt === 7 ? `${t.low} (7)` : cnt === 15 ? `${t.med} (15)` : `${t.ultra} (25)`}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* ARRIVAL ACCURACY */}
-                    <div className="settings-row" style={{ display: 'block' }}>
-                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>{t.accuracy}:</span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            {[15.0, 5.0, 1.5].map(acc => (
-                                <button key={acc} className={`hud-button ${mission.arrivalAccuracy === acc ? 'active' : ''}`} style={{ flex: 1, margin: 0, fontSize: '10px' }} onClick={() => dispatch({ type: 'SET_ARRIVAL_ACCURACY', payload: acc })}>
-                                    {acc === 15.0 ? t.easy : acc === 5.0 ? t.normal : t.hard} ({acc}m)
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* AI NAVIGATION OPTIONS */}
-                    <div className="settings-row" style={{ display: 'block' }}>
-                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>AI NAVIGATION OPTIONS:</span>
-                        <button className={`hud-button ${ai.aiUseMonteCarlo ? 'active' : ''}`} style={{ width: '100%', marginBottom: '8px' }} onClick={() => dispatch({ type: 'SET_AI_USE_MC', payload: !ai.aiUseMonteCarlo })}>
-                            {t.useMonteCarlo} (Smart Sensors)
-                        </button>
-                        <button className={`hud-button ${ai.aiUsePath ? 'active' : ''}`} style={{ width: '100%' }} onClick={() => dispatch({ type: 'SET_AI_USE_PATH', payload: !ai.aiUsePath })}>
-                            {t.usePlannedPath} (Follow Architect Path)
-                        </button>
-                        <div style={{ fontSize: '9px', color: 'rgba(0,255,255,0.4)', marginTop: '6px', lineHeight: '1.4' }}>
-                            Smart Sensors: enables Vision by UNSEEN ENGINE Monte Carlo fan support.<br />
-                            Follow Path: AI uses Architect route as navigation guide.
-                        </div>
-                    </div>
-
-                    {/* ENGINE SELECTION */}
-                    <div className="settings-row" style={{ display: 'block' }}>
-                        <span className="label" style={{ marginBottom: '8px', display: 'block', fontSize: '10px', letterSpacing: '2px' }}>ENGINE SELECTION:</span>
-                        <select
-                            value={isCosmos ? 'nvidia/Cosmos-Reason2-2B' : ai.aiModel}
-                            onChange={(e) => dispatch({ type: 'SET_AI_MODEL', payload: e.target.value })}
-                            style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none', cursor: 'pointer', marginBottom: '10px' }}
-                        >
-                            <option value="gemini-3-flash-preview">Google Gemini 3 Flash</option>
-                            <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro ✦ NEW</option>
-                            <option value="nvidia/Cosmos-Reason2-2B">NVIDIA Cosmos (Local NIM)</option>
-                        </select>
-
-                        {isCosmos ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(0,255,255,0.05)', border: '1px solid rgba(0,255,255,0.2)' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>AI MODEL NAME (vLLM):</span>
-                                    <input className="api-input" value={ai.aiModel} onChange={(e) => dispatch({ type: 'SET_AI_MODEL', payload: e.target.value })} placeholder="nvidia/Cosmos-Reason2-2B" style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>NIM ENDPOINT URL:</span>
-                                    <input className="api-input" value={ai.nvidiaNimUrl} onChange={(e) => dispatch({ type: 'SET_NVIDIA_NIM_URL', payload: e.target.value })} placeholder="http://IP_ADDRESS:8000" style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>NVIDIA API KEY (NIM):</span>
-                                    <input className="api-input" type="password" value={ai.nvidiaApiKey} onChange={(e) => dispatch({ type: 'SET_NVIDIA_API_KEY', payload: e.target.value })} placeholder="nv-nim-..." style={{ background: 'rgba(0,0,0,0.5)', width: '100%', border: '1px solid rgba(0,255,255,0.3)', color: '#00FFFF', padding: '6px', fontSize: '11px' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
-                                </div>
-                            </div>
+                    <div style={{ marginTop: '20px', padding: '15px 0', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                        {!confirmReset ? (
+                            <button
+                                className="hud-button"
+                                style={{
+                                    width: '100%',
+                                    border: '1px solid #FF0055',
+                                    color: '#FF0055',
+                                    background: 'rgba(255, 0, 85, 0.05)',
+                                    fontSize: '10px',
+                                    letterSpacing: '2px'
+                                }}
+                                onClick={() => setConfirmReset(true)}
+                            >
+                                RESET TO DEFAULTS
+                            </button>
                         ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <span style={{ fontSize: '9px', color: 'rgba(0,255,255,0.6)' }}>{t.geminiApiKey}:</span>
-                                <input type="password" value={ai.apiKey || ''} onChange={(e) => dispatch({ type: 'SET_API_KEY', payload: e.target.value })} placeholder="Enter Gemini Key..." style={{ width: '100%', background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #00FFFF', color: '#00FFFF', padding: '8px', fontFamily: 'monospace', fontSize: '12px', outline: 'none' }} onPointerDownCapture={(e) => { e.stopPropagation(); }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', border: '1px solid #FF0055', background: 'rgba(255, 0, 85, 0.08)' }}>
+                                <div style={{ fontSize: '10px', color: '#FF0055', textAlign: 'center', letterSpacing: '1px' }}>CONFIRM FACTORY RESET?</div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button className="hud-button" style={{ flex: 1, border: '1px solid #FF0055', color: '#FF0055', fontSize: '10px' }} onClick={() => { dispatch({ type: 'RESET_DEFAULTS' }); setConfirmReset(false); }}>
+                                        <span className="btn-bracket">[</span> YES <span className="btn-bracket">]</span>
+                                    </button>
+                                    <button className="hud-button" style={{ flex: 1, fontSize: '10px' }} onClick={() => setConfirmReset(false)}>
+                                        <span className="btn-bracket">[</span> CANCEL <span className="btn-bracket">]</span>
+                                    </button>
+                                </div>
                             </div>
                         )}
+                        <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '9px', color: 'rgba(255, 255, 255, 0.3)', letterSpacing: '1px' }}>
+                            ✓ SETTINGS AUTO-SAVED TO PERSISTENT STORAGE
+                        </div>
                     </div>
                 </div>
 
-                <div className="settings-row">
-                    <span className="label">{t.language}:</span>
-                    <div className="language-selector">{['EN', 'RU', 'UA'].map((l) => (<button key={l} className={`lang-btn ${ui.language === l ? 'active' : ''}`} onClick={() => dispatch({ type: 'SET_LANGUAGE', payload: l })}>{l}</button>))}</div>
-                </div>
+
                 <button className="hud-button close-btn" onClick={onClose}><span className="btn-bracket">[</span>{t.close}<span className="btn-bracket">]</span></button>
             </CornerBrackets>
         </div>
     );
 }
 
-// Inline SVG Vision Eye Logo (from Unseen Vision brand)
-function VisionEyeLogo({ size = 40 }) {
-    return (
-        <div style={{
-            width: size, height: size,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%)',
-            flexShrink: 0
-        }}>
-            <svg xmlns="http://www.w3.org/2000/svg" width={size * 0.65} height={size * 0.65} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
-                <circle cx="12" cy="12" r="3" />
-            </svg>
-        </div>
-    );
-}
-
-function VisionLogoFull() {
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
-            <VisionEyeLogo size={44} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '22px', fontWeight: 'bold', color: 'white', lineHeight: 1, fontFamily: 'monospace', letterSpacing: '1px' }}>Vision</span>
-                <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.55)', lineHeight: 1, letterSpacing: '2px', textTransform: 'uppercase' }}>by UNSEEN ENGINE</span>
-            </div>
-        </div>
-    );
-}
-
-// v4.0.0: TopLogos — ALWAYS shows a pair. Left = active engine, Right = UNSEEN ENGINE brand
-function TopLogos({ isAiOnline, driveMode }) {
-    const state = useSimulationState();
-    const terminalOpen = state.ui.terminalOpen;
-    const uiVisible = state.ui.uiVisible;
-    if (!uiVisible) return null;
-
-    const isCosmos = state.ai.visionProvider === 'cosmos';
-    const isVisionDriving = !isAiOnline && driveMode === DRIVE_MODES.AUTOPILOT;
-
-    // v4.0.0: Left logo is ALWAYS the active engine. Right is ALWAYS UNSEEN ENGINE brand.
-    const getLeftLogo = () => {
-        if (!isAiOnline || isVisionDriving) {
-            return <VisionEyeLogo size={44} />;
-        }
-        const partnerLogo = isCosmos ? "/Nvidia_logo_.svg" : "/gemini-color.svg";
-        const partnerLogoHeight = isCosmos ? '51px' : '56px';
-        return <img src={partnerLogo} alt={isCosmos ? 'NVIDIA' : 'Google Gemini'} style={{ height: partnerLogoHeight }} />;
-    };
-
-    // Get human-readable active engine name
-    const getEngineBadge = () => {
-        if (!isAiOnline || isVisionDriving) return 'Vision by UNSEEN ENGINE';
-        const model = state.ai.aiModel;
-        if (model.includes('cosmos') || model.includes('Cosmos')) return 'NVIDIA COSMOS';
-        if (model.includes('3.1')) return 'GEMINI 3.1 PRO';
-        return 'GEMINI 3 FLASH';
-    };
-
-    const badgeColor = isAiOnline && !isVisionDriving ? '#00FFFF' : '#a5b4fc';
-    const badgeBg = isAiOnline && !isVisionDriving ? 'rgba(0, 255, 255, 0.1)' : 'rgba(99, 102, 241, 0.15)';
-    const badgeBorder = isAiOnline && !isVisionDriving ? 'rgba(0, 255, 255, 0.4)' : 'rgba(99, 102, 241, 0.6)';
-
-    return (
-        <div className="top-logos-container" style={{
-            position: 'fixed',
-            top: '20px',
-            left: '50%',
-            transform: `translateX(${terminalOpen ? 'calc(-50% - 160px)' : '-50%'})`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '8px',
-            zIndex: 100,
-            transition: 'transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)'
-        }}>
-            {/* ALWAYS show logo pair: Left = active engine, Right = UNSEEN ENGINE */}
-            <div className="top-logos" style={{ display: 'flex', alignItems: 'center', gap: '30px', pointerEvents: 'none' }}>
-                <div className="logo-section">
-                    {getLeftLogo()}
-                </div>
-                <div className="logo-divider" style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.2)' }} />
-                <div className="logo-section">
-                    <img src="/Unseen_logo.svg" alt="UNSEEN ENGINE" style={{ height: '54px' }} />
-                </div>
-            </div>
-
-            {/* Engine badge — ALWAYS visible, shows which engine is active */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '5px 16px',
-                background: badgeBg,
-                border: `1px solid ${badgeBorder}`,
-                borderRadius: '4px',
-            }}>
-                {(driveMode === DRIVE_MODES.AUTOPILOT) && (
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: badgeColor, boxShadow: `0 0 8px ${badgeColor}`, animation: 'pulse 1.5s infinite' }} />
-                )}
-                <div style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '2px', color: badgeColor }}>
-                    {getEngineBadge()}
-                    {driveMode === DRIVE_MODES.AUTOPILOT && <span style={{ opacity: 0.6, marginLeft: '8px' }}>PILOTING</span>}
-                </div>
-            </div>
-        </div>
-    );
-}
-
+// Help Modal — Cosmos Cookoff: Updated descriptions
 function HelpModal({ isOpen, onClose, lang }) {
     if (!isOpen) return null;
     const t = STRINGS[lang].helpContent;
@@ -622,11 +453,10 @@ function HelpModal({ isOpen, onClose, lang }) {
             <CornerBrackets className="settings-panel help-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
                 <h2 className="panel-title">{t.title}</h2>
                 <div className="help-content-scroll">
-                    <p style={{ color: '#00FFFF', fontWeight: 'bold', marginBottom: '15px', fontSize: '12px' }}>{t.concept}</p>
+                    <p style={{ color: '#76b900', fontWeight: 'bold', marginBottom: '15px', fontSize: '12px' }}>{t.concept}</p>
                     <ul style={{ listStyle: 'none', padding: 0 }}>
                         <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#00FF41', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>MANUAL NAVIGATION</span> {t.manual}</li>
-                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#00FFFF', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>TACTICAL AUTOPILOT</span> {t.ai}</li>
-                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#FFBF00', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>Vision by UNSEEN ENGINE</span> {t.core}</li>
+                        <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(118, 185, 0, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#76b900', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>COSMOS REASON 2 AUTOPILOT</span> NVIDIA Cosmos Reason 2 analyzes terrain via LIDAR and visual scene capture, then autonomously navigates the rover to the destination signal.</li>
                         <li style={{ marginBottom: '15px', borderLeft: '2px solid rgba(0, 255, 255, 0.3)', paddingLeft: '10px' }}><span style={{ color: '#888', fontWeight: 'bold', display: 'block', fontSize: '10px', marginBottom: '4px' }}>MISSION PARAMETERS</span> {t.settings}</li>
                     </ul>
                 </div>
@@ -637,7 +467,7 @@ function HelpModal({ isOpen, onClose, lang }) {
 }
 
 function ControlsHint({ lang }) { const t = STRINGS[lang]; return <div className="controls-hint">{t.controls}</div>; }
-function MobileControls({ onInputChange, onPlanRoute }) {
+function MobileControls({ onInputChange }) {
     const joystickRef = useRef(null);
     const knobRef = useRef(null);
     const touchStartPos = useRef({ x: 0, y: 0 });
@@ -680,7 +510,7 @@ function MobileControls({ onInputChange, onPlanRoute }) {
     );
 }
 
-// v4.0.0: Main HUD — reads from Context, minimal props
+// Main HUD — Cosmos Cookoff Edition: No TopLogos, clean minimal UI
 export default function HUD(props) {
     const state = useSimulationState();
     const dispatch = useSimulationDispatch();
@@ -688,8 +518,8 @@ export default function HUD(props) {
 
     const {
         telemetry, targetDistance, elapsedTime, riskMetrics,
-        isAiOnline, isAiPlanning, isMcCalculating, aiQuote,
-        onPlanRoute, onNewTerrain, onRestart, onToggleCalibration, onToggleNav,
+        isAiOnline, isAiPlanning, isMcCalculating,
+        onNewTerrain, onRestart, onToggleCalibration,
         onMobileInput, capturedFrame, lidarScan, isMobile
     } = props;
 
@@ -712,27 +542,37 @@ export default function HUD(props) {
                     {isVisible ? 'HIDE INTERFACE' : 'RESTORE HUD'}
                 </button>
 
-                <TopLogos isAiOnline={isAiOnline} driveMode={mission.driveMode} />
+                {/* Cosmos Cookoff Edition — subtle top accent bar */}
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, height: '3px',
+                    background: 'linear-gradient(90deg, transparent 0%, #76b900 20%, #76b900 80%, transparent 100%)',
+                    opacity: 0.7, zIndex: 1000, pointerEvents: 'none'
+                }} />
+                <div style={{
+                    position: 'fixed', top: '6px', left: '50%', transform: 'translateX(-50%)',
+                    fontSize: '9px', letterSpacing: '3px', color: 'rgba(118, 185, 0, 0.5)',
+                    fontFamily: 'monospace', pointerEvents: 'none', zIndex: 1000,
+                    textShadow: '0 0 10px rgba(118, 185, 0, 0.3)'
+                }}>PHYSICAL AI · AUTONOMOUS REASONING</div>
 
                 {isVisible && (
                     <>
-                        <TelemetryPanel telemetry={telemetry} lang={lang} navigationOverlay={mission.navigationOverlay} onToggleHelp={() => dispatch({ type: 'TOGGLE_HELP' })} sCVaR={riskMetrics?.sCVaR} />
-                        <MissionPanel targetDistance={targetDistance} lang={lang} elapsedTime={elapsedTime} onNewTerrain={onNewTerrain} onOpenSettings={() => setIsSettingsOpen(true)} SMaR={riskMetrics?.SMaR} navigationOverlay={mission.navigationOverlay} />
+                        <TelemetryPanel telemetry={telemetry} lang={lang} onToggleHelp={() => dispatch({ type: 'TOGGLE_HELP' })} />
+                        <MissionPanel targetDistance={targetDistance} lang={lang} elapsedTime={elapsedTime} onNewTerrain={onNewTerrain} onOpenSettings={() => setIsSettingsOpen(true)} />
                     </>
                 )}
 
                 <ControlPanel
                     driveMode={mission.driveMode} lang={lang}
                     onSetDriveMode={(mode) => dispatch({ type: 'SET_DRIVE_MODE', payload: mode })}
-                    simulationState={mission.simulationState} failReason={mission.failReason}
-                    navigationOverlay={mission.navigationOverlay} onToggleNav={onToggleNav} onPlanRoute={onPlanRoute}
-                    isAiOnline={isAiOnline} isAiPlanning={isAiPlanning} isMcCalculating={isMcCalculating} aiQuote={aiQuote}
+                    simulationState={mission.simulationState}
+                    isAiOnline={isAiOnline} isAiPlanning={isAiPlanning}
                 />
 
                 <TerminalPanel />
 
                 {isMobile && mission.simulationState === 'running' && (
-                    <MobileControls onInputChange={onMobileInput} onPlanRoute={onPlanRoute} />
+                    <MobileControls onInputChange={onMobileInput} />
                 )}
 
                 {lidarScan && isVisible && <LidarPanel data={lidarScan} lang={lang} />}
@@ -743,7 +583,7 @@ export default function HUD(props) {
                     onToggleCalibration={onToggleCalibration}
                 />
 
-                {/* Vision Debug Overlay */}
+                {/* Cosmos Vision Debug Overlay */}
                 {capturedFrame && (
                     <div style={{
                         position: 'absolute',
@@ -752,7 +592,7 @@ export default function HUD(props) {
                         width: '160px',
                         height: '110px',
                         background: 'rgba(0,0,0,0.8)',
-                        border: '1px solid #00FFFF',
+                        border: '1px solid #76b900',
                         padding: '4px',
                         display: 'flex',
                         flexDirection: 'column',
@@ -760,8 +600,8 @@ export default function HUD(props) {
                         pointerEvents: 'none',
                         zIndex: 10
                     }}>
-                        <div style={{ fontSize: '9px', color: '#00FFFF', letterSpacing: '1px' }}>AI VISION FEED (LIVE)</div>
-                        <img src={`data:image/png;base64,${capturedFrame}`} style={{ width: '100%', height: '80px', objectFit: 'cover', opacity: 0.8 }} alt="AI Vision" />
+                        <div style={{ fontSize: '9px', color: '#76b900', letterSpacing: '1px' }}>COSMOS VISION FEED</div>
+                        <img src={`data:image/png;base64,${capturedFrame}`} style={{ width: '100%', height: '80px', objectFit: 'cover', opacity: 0.8 }} alt="Cosmos Vision" />
                     </div>
                 )}
 

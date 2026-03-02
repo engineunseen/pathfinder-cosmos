@@ -128,6 +128,9 @@ const Rover = forwardRef(({ getInput, onTelemetryUpdate, startPosition = [0, 2, 
             api.angularVelocity.set(0, 0, 0);
             api.rotation.set(0, 0, 0);
         },
+        stop: () => {
+            api.angularVelocity.set(0, 0, 1e-6); // Almost zero, prevents drift
+        }
     }));
 
     // Physics Loop
