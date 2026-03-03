@@ -1,6 +1,8 @@
 # Pathfinder: Autonomous Lunar Navigation with NVIDIA Cosmos Reason 2
 **NVIDIA Cosmos Cookoff – Official Submission**
 
+🔗 **Live Demo:** [cosmos.unseenengine.tech](https://cosmos.unseenengine.tech/)
+
 ## 🚀 Overview
 **Pathfinder** is a real-time Physical AI simulation demonstrating autonomous lunar rover navigation. A 6-wheeled rover must traverse procedurally generated, hazardous lunar terrain to reach a destination signal — guided entirely by **NVIDIA Cosmos Reason 2**.
 
@@ -47,13 +49,13 @@ Cosmos Reason 2 serves as the autonomous **"Robot Brain"** — the central decis
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/engineunseen/pathfinder
-cd pathfinder
+git clone https://github.com/engineunseen/pathfinder-cosmos
+cd pathfinder-cosmos
 npm install
 ```
 
 ### 2. Start Cosmos NIM Server
-You need a running NVIDIA Cosmos Reason 2 inference server. See [Cosmos Server Setup](Docs/NVIDIA_COSMOS_SERVER_SETUP.md) for detailed instructions, or use the quick setup script:
+You need a running NVIDIA Cosmos Reason 2 inference server. See [Cosmos Setup Guide](Docs/COSMOS_SETUP_GUIDE.md) for detailed instructions, or use the quick setup script:
 
 ```bash
 bash Docs/setup_cosmos.sh
@@ -63,7 +65,7 @@ bash Docs/setup_cosmos.sh
 ```bash
 npm run dev
 ```
-Open `http://localhost:5173`, then:
+Open [cosmos.unseenengine.tech](https://cosmos.unseenengine.tech/) (or `http://localhost:5173` for local), then:
 1. Click the ⚙ Settings gear icon
 2. Enter your **NIM Endpoint URL** (e.g., `http://your-gpu-server:8000`)
 3. Enter your **NVIDIA API Key**
@@ -106,5 +108,5 @@ Then set your NIM URL to `http://localhost:3001` in Settings.
 
 ---
 **Developer:** Andrew Turtsevych  
-**Project:** [Engine Unseen](https://engineunseen.tech)  
+**Project:** [Unseen Engine](https://unseenengine.tech/)  
 **Submission:** March 2026

@@ -510,6 +510,31 @@ function MobileControls({ onInputChange }) {
     );
 }
 
+// Cosmos Offline Modal — elegant message for visitors without GPU server
+function CosmosOfflineModal({ isOpen, onClose }) {
+    if (!isOpen) return null;
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="hud-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', textAlign: 'center', padding: '30px' }}>
+                <CornerBrackets>
+                    <div style={{ color: '#76b900', fontSize: '11px', letterSpacing: '3px', fontWeight: 700, marginBottom: '16px' }}>NVIDIA COSMOS REASON 2</div>
+                    <div style={{ color: '#00ffff', fontSize: '13px', letterSpacing: '1px', marginBottom: '12px' }}>AI SERVER CONNECTION REQUIRED</div>
+                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', lineHeight: '1.6', marginBottom: '20px' }}>
+                        This autonomous navigation demo requires an<br />
+                        <span style={{ color: '#76b900' }}>NVIDIA Cosmos Reason 2</span> server for the AI autopilot.<br /><br />
+                        Use <span style={{ color: '#00ffff' }}>Manual Mode (WASD)</span> to explore the lunar terrain,<br />
+                        or check the setup guide to connect your own NIM instance.
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                        <button className="hud-button" onClick={onClose} style={{ flex: 1 }}>MANUAL MODE</button>
+                        <button className="hud-button" onClick={() => window.open('https://github.com/engineunseen/pathfinder-cosmos#-quick-start', '_blank')} style={{ flex: 1, borderColor: '#76b900', color: '#76b900' }}>SETUP GUIDE</button>
+                    </div>
+                </CornerBrackets>
+            </div>
+        </div>
+    );
+}
+
 // Main HUD — Cosmos Cookoff Edition: No TopLogos, clean minimal UI
 export default function HUD(props) {
     const state = useSimulationState();
@@ -520,7 +545,8 @@ export default function HUD(props) {
         telemetry, targetDistance, elapsedTime, riskMetrics,
         isAiOnline, isAiPlanning, isMcCalculating,
         onNewTerrain, onRestart, onToggleCalibration,
-        onMobileInput, capturedFrame, lidarScan, isMobile
+        onMobileInput, capturedFrame, lidarScan, isMobile,
+        showOfflineModal, onCloseOfflineModal
     } = props;
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -564,7 +590,16 @@ export default function HUD(props) {
 
                 <ControlPanel
                     driveMode={mission.driveMode} lang={lang}
-                    onSetDriveMode={(mode) => dispatch({ type: 'SET_DRIVE_MODE', payload: mode })}
+                    onSetDriveMode={(mode) => {
+                        dispatch({ type: 'SET_DRIVE_MODE', payload: mode });
+                        if (mode === 'autopilot' && !isAiOnline) {
+                            setTimeout(() => {
+                                if (typeof props.onShowOfflineModal === 'function') {
+                                    props.onShowOfflineModal();
+                                }
+                            }, 600);
+                        }
+                    }}
                     simulationState={mission.simulationState}
                     isAiOnline={isAiOnline} isAiPlanning={isAiPlanning}
                 />
@@ -622,6 +657,8 @@ export default function HUD(props) {
                     reason={mission.simulationState} lang={lang} onRestart={onRestart} onNewTerrain={onNewTerrain} safetyScore={100} elapsedTime={elapsedTime}
                 />
             )}
+
+            <CosmosOfflineModal isOpen={showOfflineModal} onClose={onCloseOfflineModal} />
         </>
     );
 }

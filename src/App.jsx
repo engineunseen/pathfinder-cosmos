@@ -144,6 +144,8 @@ export default function SimulationApp() {
     return !!ai.nvidiaNimUrl && !!ai.nvidiaApiKey;
   }, [ai.nvidiaNimUrl, ai.nvidiaApiKey]);
   const [isMcCalculating, setIsMcCalculating] = useState(false);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const aiErrorCountRef = useRef(0);
 
   const roverRef = useRef();
   const batteryRef = useRef(100);
@@ -305,7 +307,14 @@ export default function SimulationApp() {
         case 'KeyA': inputRef.current.left = 1; break;
         case 'KeyD': inputRef.current.right = 1; break;
         case 'Space': inputRef.current.brake = true; break;
-        case 'KeyM': dispatch({ type: 'TOGGLE_AUTOPILOT' }); break;
+        case 'KeyM': {
+          dispatch({ type: 'TOGGLE_AUTOPILOT' });
+          // Show offline modal after brief delay so visuals (LIDAR, Monte Carlo) activate first
+          if (!isAiConfigured && mission.driveMode !== DRIVE_MODES.AUTOPILOT) {
+            setTimeout(() => setShowOfflineModal(true), 600);
+          }
+          break;
+        }
         case 'KeyR': handleRestart(); break;
       }
     };
@@ -506,8 +515,14 @@ export default function SimulationApp() {
               }
             })
             .catch(err => {
-              dispatch({ type: 'ADD_LOG', payload: { text: "SYSTEM: Cosmos AI pipeline error.", type: 'critical' } });
-              console.error("AI Autopilot Error:", err);
+              aiErrorCountRef.current++;
+              if (aiErrorCountRef.current <= 2) {
+                dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: Cosmos connection attempt ${aiErrorCountRef.current}... Check NIM server.`, type: 'warning' } });
+              } else if (aiErrorCountRef.current === 3) {
+                dispatch({ type: 'ADD_LOG', payload: { text: 'SYSTEM: Cosmos NIM unreachable. Switching to Manual. See README for setup.', type: 'warning' } });
+                dispatch({ type: 'SET_DRIVE_MODE', payload: DRIVE_MODES.MANUAL });
+              }
+              console.warn("AI Autopilot:", err.message);
             })
             .finally(() => { isAiAutopilotRunningRef.current = false; });
         }
@@ -534,8 +549,12 @@ export default function SimulationApp() {
           inputRef.current.brake = true;
 
           if (lastAiSourceRef.current !== 'waiting') {
-            const reason = !isAiConfigured ? "NOT_CONFIGURED" : (isStale ? "LATENCY_CRITICAL" : "CONNECTING");
-            dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: AI OFFLINE (${reason}). Rover stopped. Configure Cosmos NIM or switch to Manual.`, type: 'warning' } });
+            if (!isAiConfigured) {
+              dispatch({ type: 'ADD_LOG', payload: { text: 'AUTOPILOT: Awaiting Cosmos NIM server connection.', type: 'info' } });
+            } else {
+              const reason = isStale ? "LATENCY_CRITICAL" : "CONNECTING";
+              dispatch({ type: 'ADD_LOG', payload: { text: `SYSTEM: AI status: ${reason}. Rover holding position.`, type: 'warning' } });
+            }
             lastAiSourceRef.current = 'waiting';
           }
         }
@@ -681,6 +700,12 @@ export default function SimulationApp() {
             elapsedTime={elapsedRef.current}
             riskMetrics={riskMetrics}
             isAiOnline={isAiConfigured}
+            showOfflineModal={showOfflineModal}
+            onShowOfflineModal={() => setShowOfflineModal(true)}
+            onCloseOfflineModal={() => {
+              setShowOfflineModal(false);
+              dispatch({ type: 'SET_DRIVE_MODE', payload: DRIVE_MODES.MANUAL });
+            }}
             isAiPlanning={isAiPlanning}
             isMcCalculating={state.monteCarloResults?.recalculating}
             onNewTerrain={handleNewTerrain}
@@ -691,6 +716,9 @@ export default function SimulationApp() {
             onMobileInput={(inp) => {
               if (inp.toggleAutopilot) {
                 dispatch({ type: 'TOGGLE_AUTOPILOT' });
+                if (!isAiConfigured && mission.driveMode !== DRIVE_MODES.AUTOPILOT) {
+                  setTimeout(() => setShowOfflineModal(true), 600);
+                }
               } else {
                 if (mission.driveMode === DRIVE_MODES.AUTOPILOT && (inp.forward > 0 || inp.backward > 0 || inp.left !== 0 || inp.right !== 0)) {
                   dispatch({ type: 'SET_DRIVE_MODE', payload: DRIVE_MODES.MANUAL });

@@ -47,5 +47,5 @@ This guide covers:
 
 ---
 **Lead Developer:** Andrew Turtsevych  
-**Project:** [Unseen Engine](https://unseenvision.netlify.app/)  
+**Project:** [Unseen Engine](https://unseenengine.tech/)  
 **Submission Date:** February 2026  
