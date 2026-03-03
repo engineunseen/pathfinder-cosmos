@@ -7,7 +7,7 @@
 Built with **React Three Fiber**, **Cannon.js**, and powered by the **NVIDIA Cosmos Physical AI stack**.
 
 ## 🧠 Powered by NVIDIA Cosmos Reason 2
-This project is built for the **Cosmos Cookoff** challenge. It utilizes Cosmos Reason 2 as the central "Robot Brain" for:
+This project is built for the **Cosmos Cookoff** challenge. It utilizes Cosmos Reason 2 as the central "Robot Brain" for the **Physical AI simulation**:
 - **Semantic Terrain Reasoning**: Analyzing visual heightmaps to understand physical topography.
 - **Autonomous Decision Making**: Real-time tactical control (steering/throttle) based on multimodal sensor data.
 - **Physical Plausibility**: Bridging the gap between physics-based Monte Carlo simulations and semantic mission directives.
@@ -35,23 +35,15 @@ This project is built for the **Cosmos Cookoff** challenge. It utilizes Cosmos R
 - **R**: Regenerate Lunar Terrain (New Seed)
 
 ## 🧪 Deployment Instructions
-1. **Clone the project**:
-   ```bash
-   git clone https://github.com/engineunseen/pathfinder
-   cd pathfinder
-   ```
-2. **Install Dependencies**:
-   ```bash
-   npm install
-   ```
-3. **Configure API**:
-   Open the application in your browser, go to the **SETTINGS HUD**, and enter your **NVIDIA API Key** to enable Cosmos Reason 2 features.
-4. **Run Development Server**:
-   ```bash
-   npm run dev
-   ```
-5. **Open Browser**:
-   Navigate to `http://localhost:5173`.
+For a complete, beginner-friendly guide on setting up the NVIDIA Cosmos "Robot Brain", please follow our single master document:
+
+👉 **[COSMOS_SETUP_GUIDE.md](./Docs/COSMOS_SETUP_GUIDE.md)**
+
+This guide covers:
+1. **Remote NIM Server** (Brev.dev)
+2. **Local Proxy Bridge** (proxy.js)
+3. **Application Configuration** (App Settings)
+4. **Troubleshooting** (Common fixes)
 
 ---
 **Lead Developer:** Andrew Turtsevych  

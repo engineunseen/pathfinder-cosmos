@@ -64,7 +64,7 @@ function proxyRequest(req, payload, targetUrl, res, redirectCount = 0) {
                 const modelList = await fetchAvailableModels(baseUrl, cleanHeaders['authorization'], req.headers['x-target-url']);
                 console.error(`\n❌ MODEL NOT FOUND: The name in settings is wrong.`);
                 console.log(`📡 AVAILABLE MODELS ON SERVER: [ ${modelList} ]`);
-                console.log(`👉 Action: Copy the correct name into 'AI Model' settings in the game.\n`);
+                console.log(`👉 Action: Copy the correct name into 'AI Model' settings in the simulation.\n`);
             }
 
             console.log(`[${proxyRes.statusCode}] -> ${targetUrl.substring(0, 50)}...`);

@@ -160,6 +160,7 @@ export default function SimulationApp() {
   const lastAiReasoningRef = useRef("");
   const lastAiLogTimeRef = useRef(0);
   const lastAiSourceRef = useRef(null);
+  const manualOverrideRef = useRef(false);
   const aiCommandRef = useRef(null);
   const lastAiCommandsRef = useRef([]);
   const isAiAutopilotRunningRef = useRef(false);
@@ -289,11 +290,13 @@ export default function SimulationApp() {
       const moveKeys = ['KeyW', 'KeyS', 'KeyA', 'KeyD'];
       const brakeKeys = ['Space'];
 
-      // AUTO OVERRIDE: If autopilot is active and a movement key is pressed, switch to manual.
+      // TEMPORARY OVERRIDE: While WASD/Space is held during autopilot, manual input takes priority.
+      // Autopilot mode stays active — AI keeps computing — but its commands are bypassed until keys released.
       if (isAutopilot && (moveKeys.includes(e.code) || brakeKeys.includes(e.code))) {
-        dispatch({ type: 'SET_DRIVE_MODE', payload: DRIVE_MODES.MANUAL });
-        dispatch({ type: 'ADD_LOG', payload: { text: "MODE: MANUAL OVERRIDE (KEYBOARD)", type: 'warning' } });
-        if (roverRef.current?.stop) roverRef.current.stop();
+        if (!manualOverrideRef.current) {
+          manualOverrideRef.current = true;
+          dispatch({ type: 'ADD_LOG', payload: { text: "PILOT: MANUAL OVERRIDE (HOLD)", type: 'warning' } });
+        }
       }
 
       switch (e.code) {
@@ -307,13 +310,20 @@ export default function SimulationApp() {
       }
     };
     const handleKeyUp = (e) => {
-      // Always reset keys on KeyUp, even if we were in Autopilot (which might have switched to Manual)
       switch (e.code) {
         case 'KeyW': inputRef.current.forward = 0; break;
         case 'KeyS': inputRef.current.backward = 0; break;
         case 'KeyA': inputRef.current.left = 0; break;
         case 'KeyD': inputRef.current.right = 0; break;
         case 'Space': inputRef.current.brake = false; break;
+      }
+      // Restore autopilot when ALL movement keys are released
+      if (manualOverrideRef.current) {
+        const inp = inputRef.current;
+        if (inp.forward === 0 && inp.backward === 0 && inp.left === 0 && inp.right === 0 && !inp.brake) {
+          manualOverrideRef.current = false;
+          dispatch({ type: 'ADD_LOG', payload: { text: "PILOT: AUTOPILOT RESTORED", type: 'info' } });
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -388,7 +398,9 @@ export default function SimulationApp() {
         const beaconPos = new THREE.Vector3(terrainData.beacon.x, telemetryRef.current.position[1], terrainData.beacon.z);
         const roverPos = new THREE.Vector3(...telemetryRef.current.position);
 
-        const relTargetNow = beaconPos.clone().sub(roverPos).applyQuaternion(roverQuat.invert());
+        // IMPORTANT: clone before invert() — invert mutates in-place!
+        const inverseQuat = roverQuat.clone().invert();
+        const relTargetNow = beaconPos.clone().sub(roverPos).applyQuaternion(inverseQuat);
         const realTimeBearing = Math.atan2(relTargetNow.x, -relTargetNow.z) * 180 / Math.PI;
 
         // Predicted bearing for latent AI
@@ -408,6 +420,38 @@ export default function SimulationApp() {
         const relTargetPred = beaconPos.clone().sub(predictedPos3).applyQuaternion(predictedQuat.invert());
         const predictedBearing = Math.atan2(relTargetPred.x, -relTargetPred.z) * 180 / Math.PI;
 
+        // Pre-compute suggested steer/throttle for the AI to refine
+        const absBearing = Math.abs(predictedBearing);
+        let suggestedSteer = Math.max(-1, Math.min(1, predictedBearing / 90));
+
+        // ═══ APPROACH ALGORITHM ═══
+        let suggestedThrottle;
+
+        if (targetDistance > 30) {
+          // CRUISE: full speed, proportional steering
+          suggestedThrottle = absBearing > 30 ? 0.25 : (absBearing > 10 ? 0.5 : 0.7);
+        } else if (targetDistance > 10) {
+          // APPROACH: progressive slowdown, damped steering
+          suggestedThrottle = Math.max(0.15, targetDistance / 60);
+          // Damp steering near target to prevent spiral overshoot
+          suggestedSteer *= Math.min(1, targetDistance / 30);
+        } else {
+          // FINAL: precision alignment
+          if (absBearing > 90) {
+            // Target behind: reverse
+            suggestedThrottle = -0.2;
+            suggestedSteer = predictedBearing > 0 ? 0.5 : -0.5;
+          } else if (absBearing > 40) {
+            // Misaligned: stop and turn in place
+            suggestedThrottle = 0;
+            suggestedSteer = predictedBearing > 0 ? 0.8 : -0.8;
+          } else {
+            // Aligned: creep forward
+            suggestedThrottle = Math.max(0.08, targetDistance / 80);
+            suggestedSteer *= 0.5; // gentle final corrections
+          }
+        }
+
         const aiState = {
           position: telemetryRef.current.position,
           velocity: telemetryRef.current.velocity,
@@ -424,7 +468,9 @@ export default function SimulationApp() {
           capturedFrame: sceneCapturedFrame,
           visionProvider: 'cosmos',
           nvidiaNimUrl: ai.nvidiaNimUrl,
-          nvidiaApiKey: ai.nvidiaApiKey
+          nvidiaApiKey: ai.nvidiaApiKey,
+          suggestedSteer: suggestedSteer,
+          suggestedThrottle: suggestedThrottle
         };
 
         // AI Autopilot call (throttled to 1s)
@@ -504,10 +550,14 @@ export default function SimulationApp() {
           }
         }
 
-        inputRef.current.left = cmd.steer > 0 ? Math.min(cmd.steer, 1) : 0;
-        inputRef.current.right = cmd.steer < 0 ? Math.min(-cmd.steer, 1) : 0;
-        inputRef.current.forward = cmd.throttle > 0 ? cmd.throttle : 0;
-        inputRef.current.backward = cmd.throttle < 0 ? -cmd.throttle : 0;
+        // Apply AI commands only when user is NOT holding WASD (temporary manual override)
+        // STEERING: positive steer = turn RIGHT, negative steer = turn LEFT
+        if (!manualOverrideRef.current) {
+          inputRef.current.right = cmd.steer > 0 ? Math.min(cmd.steer, 1) : 0;
+          inputRef.current.left = cmd.steer < 0 ? Math.min(-cmd.steer, 1) : 0;
+          inputRef.current.forward = cmd.throttle > 0 ? cmd.throttle : 0;
+          inputRef.current.backward = cmd.throttle < 0 ? -cmd.throttle : 0;
+        }
       }
     }
   }, [monteCarloTrajectories, mission.driveMode, mission.simulationState, riskMetrics, currentLatency, targetDistance]);

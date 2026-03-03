@@ -583,27 +583,34 @@ export default function HUD(props) {
                     onToggleCalibration={onToggleCalibration}
                 />
 
-                {/* Cosmos Vision Debug Overlay */}
-                {capturedFrame && (
-                    <div style={{
-                        position: 'absolute',
-                        bottom: '20px',
-                        left: '320px',
-                        width: '160px',
-                        height: '110px',
-                        background: 'rgba(0,0,0,0.8)',
-                        border: '1px solid #76b900',
-                        padding: '4px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px',
-                        pointerEvents: 'none',
-                        zIndex: 10
-                    }}>
-                        <div style={{ fontSize: '9px', color: '#76b900', letterSpacing: '1px' }}>COSMOS VISION FEED</div>
-                        <img src={`data:image/png;base64,${capturedFrame}`} style={{ width: '100%', height: '80px', objectFit: 'cover', opacity: 0.8 }} alt="Cosmos Vision" />
-                    </div>
-                )}
+                {/* Cosmos Vision Feed + LIDAR — stacked on right side, shift with terminal */}
+                <div style={{
+                    position: 'fixed',
+                    bottom: '20px',
+                    right: ui.terminalOpen && !isMobile ? '340px' : '10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    transition: 'right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1)',
+                    pointerEvents: 'none',
+                    zIndex: 10
+                }}>
+                    {capturedFrame && (
+                        <div style={{
+                            width: '160px',
+                            height: '110px',
+                            background: 'rgba(0,0,0,0.8)',
+                            border: '1px solid #76b900',
+                            padding: '4px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                        }}>
+                            <div style={{ fontSize: '9px', color: '#76b900', letterSpacing: '1px' }}>COSMOS VISION FEED</div>
+                            <img src={`data:image/png;base64,${capturedFrame}`} style={{ width: '100%', height: '80px', objectFit: 'cover', opacity: 0.8 }} alt="Cosmos Vision" />
+                        </div>
+                    )}
+                </div>
 
                 <HelpModal isOpen={ui.helpOpen} onClose={() => dispatch({ type: 'TOGGLE_HELP' })} lang={lang} />
 

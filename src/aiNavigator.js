@@ -122,7 +122,12 @@ export async function getAutopilotCommand(apiKey, state, aiModel = 'nvidia/Cosmo
 
     const lidarSweep = getLidarData(position, rotation, terrainData);
 
-    // Precise boundary vectoring
+    // Extract AI-specific LIDAR summary (after ---AI--- marker)
+    const lidarAiSummary = lidarSweep.includes('---AI---')
+        ? lidarSweep.split('---AI---')[1].trim()
+        : lidarSweep;
+
+    // Precise boundary vectoring (suppress near target — beacon may be at edge)
     const bSize = (terrainData?.size / 2) || 100;
     const dists = {
         "+X (RIGHT)": bSize - position[0],
@@ -131,34 +136,43 @@ export async function getAutopilotCommand(apiKey, state, aiModel = 'nvidia/Cosmo
         "-Z (FRONT)": position[2] + bSize
     };
     const closestSide = Object.entries(dists).sort((a, b) => a[1] - b[1])[0];
-    const boundaryWarning = closestSide[1] < 15 ? `!!! MAP BOUNDARY ${closestSide[0]} AT ${f1(closestSide[1])}m !!!` : "Clear";
+    const boundaryWarning = (closestSide[1] < 15 && targetDistance > 25)
+        ? `!!! MAP BOUNDARY ${closestSide[0]} AT ${f1(closestSide[1])}m !!!`
+        : "Clear";
 
-    const textPrompt = `You are the Tactical Guide (Autopilot) powered by NVIDIA Cosmos Reason 2. MISSION: Navigate a lunar rover to the destination signal across unknown terrain using physics-aware reasoning.
+    // Build command history string for oscillation prevention
+    const cmdHistoryStr = (state.commandHistory && state.commandHistory.length > 0)
+        ? state.commandHistory.map((c, i) => `[${i}] steer=${f2(c.steer)} throttle=${f2(c.throttle)}`).join(', ')
+        : 'None';
 
-TELEMETRY CONTEXT:
-- POSITION: [${f2(position[0])}, ${f2(position[2])}] - Current coordinates in meters.
-- VELOCITY: [${f2(velocity[0])}, ${f2(velocity[2])}] - Current speed vector.
-- TARGET DESTINATION: [${f1(targetPos[0])}, ${f1(targetPos[1])}] - The destination signal.
-- TARGET DISTANCE: ${f1(targetDistance)}m
-- RELATIVE BEARING: ${f1(relBearing)}° (negative = target is left, positive = target is right)
-- WHEELS ON GROUND: ${wheelsOnGround}/6
-- MAP BOUNDARY: ${boundaryWarning}
+    // Pre-computed defaults from bearing math (provided by App.jsx)
+    const defSteer = f2(state.suggestedSteer || 0);
+    const defThrottle = f2(state.suggestedThrottle || 0.5);
 
-SENSOR DATA:
-- MONTE CARLO FUTURES: ${fanSummary ? fanSummary : "No Data"} - Predictive trajectory simulations.
-- LIDAR TERRAIN SWEEP: ${lidarSweep}
+    const textPrompt = `You are the autopilot for a lunar rover. Drive to the destination signal.
 
-OPERATIONAL DIRECTIVE:
-1. PHASE ANALYSIS: 
-   - IF wheelsOnGround < 3: INERTIAL PHASE (Ballistics). Steering is ineffective. Minimize rotation.
-   - IF wheelsOnGround >= 3: KINETIC PHASE. Dynamic traction control active.
-2. MISSION PRIORITY: Navigate directly toward the destination signal. Use terrain data to avoid hazards.
-3. KINETIC BODY AWARENESS: You are a 150kg physics entity with 6 wheels in lunar gravity (1.62 m/s²).
-4. COGNITIVE REASONING: Adapt to lunar inertia. Reason about your mass-velocity vector. Avoid oscillations.
-5. BOUNDARY AWARENESS: If near map edge, steer toward center.
+DEFAULT COMMAND (computed from bearing): steer=${defSteer}, throttle=${defThrottle}
+Use these defaults UNLESS you see a reason to adjust.
 
-GOAL: REACH DESTINATION at [${f1(targetPos[0])}, ${f1(targetPos[1])}].
-OUTPUT JSON ONLY: { "steer": -1.0 to 1.0, "throttle": 0.0 to 1.0, "reasoning": "..." }`;
+BEARING: ${f1(relBearing)}° (negative=left, positive=right)
+DISTANCE: ${f1(targetDistance)}m
+POSITION: [${f2(position[0])}, ${f2(position[2])}]
+VELOCITY: [${f2(velocity[0])}, ${f2(velocity[2])}]
+WHEELS: ${wheelsOnGround}/6
+BOUNDARY: ${boundaryWarning}
+TERRAIN SCAN: ${lidarAiSummary}
+MONTE CARLO: ${fanSummary ? fanSummary : "N/A"}
+PREV COMMANDS: ${cmdHistoryStr}
+
+RULES:
+- If TERRAIN SCAN says CLEAR: USE THE DEFAULTS as-is.
+- If TERRAIN SCAN shows DROP or CRATER_EDGE ahead (0°–30° or 330°–360°): STEER AWAY. Adjust steer ±0.5 away from the hazard. Reduce throttle to 0.2.
+- If boundary warning: steer toward center.
+- If wheels < 3 (airborne): steer=0, throttle=0.
+- Throttle can be NEGATIVE for reverse. Use reverse (throttle=-0.3) when |bearing| > 150° (target is behind you) — this is faster than a U-turn.
+- If distance < 10m and |bearing| > 20°: STOP (throttle=0), turn in place (steer=±0.8) to align, then proceed.
+
+JSON ONLY: { "steer": ${defSteer}, "throttle": ${defThrottle}, "reasoning": "..." }`;
 
     try {
         const provider = new CosmosProvider({
@@ -218,26 +232,63 @@ function validateCmd(cmd) {
 
 export function getLidarData(position, rotation, terrainData) {
     if (!position || !rotation || !terrainData || !terrainData.heightData) return "OFFLINE";
-    const directions = [0, 45, -45, 90, -90];
-    let sweep = "";
-    directions.forEach(deg => {
-        const rad = (deg * Math.PI) / 180 + rotation[1];
-        const dist = 10;
-        const x = position[0] + Math.sin(rad) * dist;
-        const z = position[2] - Math.cos(rad) * dist;
-        const halfSize = terrainData.size / 2;
+
+    const directions = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
+    const distances = [5, 10];
+    const halfSize = terrainData.size / 2;
+    let visualLines = []; // For HUD panel
+    let hazards = [];     // For AI prompt
+
+    const sampleHeight = (x, z) => {
         const u = (x + halfSize) / terrainData.size;
         const v = (z + halfSize) / terrainData.size;
-        if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
-            const idx = Math.floor(v * 256) * 257 + Math.floor(u * 256);
-            const h = terrainData.heightData[idx];
-            const relH = h - position[1];
-            sweep += `[${deg}deg: ${dist}m away, RelH: ${relH > 0 ? '+' : ''}${relH.toFixed(1)}m] `;
-        } else {
-            sweep += `[${deg}deg: OUT] `;
+        if (u < 0 || u > 1 || v < 0 || v > 1) return null;
+        const idx = Math.floor(v * 256) * 257 + Math.floor(u * 256);
+        return terrainData.heightData[idx] || 0;
+    };
+
+    directions.forEach(deg => {
+        const rad = (deg * Math.PI) / 180 + rotation[1];
+        const results = {};
+
+        distances.forEach(dist => {
+            const x = position[0] + Math.sin(rad) * dist;
+            const z = position[2] - Math.cos(rad) * dist;
+            const h = sampleHeight(x, z);
+            if (h !== null) {
+                const relH = h - position[1];
+                results[dist] = relH;
+            } else {
+                results[dist] = 'VOID';
+            }
+        });
+
+        const r5 = results[5];
+        const r10 = results[10];
+        const r5str = r5 === 'VOID' ? 'VOID' : (r5 > 0 ? '+' : '') + r5.toFixed(1);
+        const r10str = r10 === 'VOID' ? 'VOID' : (r10 > 0 ? '+' : '') + r10.toFixed(1);
+
+        visualLines.push(`${deg}° 5m:[${r5str}] 10m:[${r10str}]`);
+
+        // Detect hazards: steep drop (crater) or steep rise (ridge)
+        if (r5 !== 'VOID' && r5 < -2.0) {
+            hazards.push(`DROP at ${deg}° (${r5.toFixed(1)}m at 5m)`);
+        } else if (r5 !== 'VOID' && r10 !== 'VOID') {
+            const slope = r10 - r5;
+            if (slope < -2.0) hazards.push(`CRATER_EDGE at ${deg}° (slope ${slope.toFixed(1)}m)`);
+            if (slope > 3.0) hazards.push(`RIDGE at ${deg}° (slope +${slope.toFixed(1)}m)`);
         }
     });
-    return sweep;
+
+    // Store visual format for HUD (newline-separated for LidarPanel parser)
+    const visualSweep = visualLines.join('\n');
+
+    // Store concise AI summary
+    const aiSummary = hazards.length > 0
+        ? `HAZARDS: ${hazards.join('; ')}`
+        : 'CLEAR — no hazards detected';
+
+    return visualSweep + '\n---AI---\n' + aiSummary;
 }
 
 export let hCanvas = null;

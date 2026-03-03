@@ -3,7 +3,7 @@
 import { createContext, useContext } from 'react';
 
 // ======== CONSTANTS ========
-export const VERSION = "v4C.2.0";
+export const VERSION = "v4C.5.0";
 export const LUNAR_GRAVITY = 1.62;
 export const EARTH_GRAVITY = 9.81;
 export const ROLLOVER_ANGLE = 60; // degrees
@@ -137,14 +137,14 @@ function simulationReducer(state, action) {
             return {
                 ...state,
                 mission: { ...state.mission, driveMode: isManual ? DRIVE_MODES.AUTOPILOT : DRIVE_MODES.MANUAL },
-                logs: addLog(state, isManual ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED", isManual ? 'warning' : 'info')
+                logs: addLog(state, isManual ? "MODE: AUTOPILOT ENGAGED" : "MODE: AUTOPILOT DISENGAGED — MANUAL CONTROL", 'warning')
             };
         }
         case 'SET_DRIVE_MODE':
             return {
                 ...state,
                 mission: { ...state.mission, driveMode: action.payload },
-                logs: addLog(state, action.payload === DRIVE_MODES.AUTOPILOT ? "MODE: AUTOPILOT ENGAGED" : "MODE: MANUAL CONTROL RESTORED", action.payload === DRIVE_MODES.AUTOPILOT ? 'warning' : 'info')
+                logs: addLog(state, action.payload === DRIVE_MODES.AUTOPILOT ? "MODE: AUTOPILOT ENGAGED" : "MODE: AUTOPILOT DISENGAGED — MANUAL CONTROL", 'warning')
             };
         // TOGGLE_NAV_OVERLAY removed — Cosmos Cookoff edition
         case 'SET_SIMULATION_STATE': {

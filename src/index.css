@@ -507,11 +507,16 @@ canvas {
 /* ---- LIDAR SCAN PANEL (Bottom Right) ---- */
 .lidar-panel {
   position: fixed;
-  bottom: 24px;
+  bottom: 140px;
   right: 16px;
   width: 180px;
   z-index: 1010;
   pointer-events: none;
+  transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.terminal-visible .lidar-panel {
+  right: 340px;
 }
 
 .lidar-inner {
